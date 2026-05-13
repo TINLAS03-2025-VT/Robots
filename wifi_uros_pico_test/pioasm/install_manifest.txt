@@ -1,0 +1,5 @@
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm-install/pioasm/pioasm
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm-install/pioasm/pioasmTargets.cmake
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm-install/pioasm/pioasmTargets-release.cmake
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm-install/pioasm/pioasmConfig.cmake
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm-install/pioasm/pioasmConfigVersion.cmake
