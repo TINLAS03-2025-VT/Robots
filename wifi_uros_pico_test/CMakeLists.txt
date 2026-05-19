@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(PICO_BOARD pico_w)
+set(PICO_PLATFORM rp2350)
+set(PICO_BOARD pico2_w)
 
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
@@ -28,6 +29,12 @@ target_include_directories(main PUBLIC
     libmicroros/include
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    WIFI_SSID="${WIFI_SSID}"
+    WIFI_PASSWORD="${WIFI_PASSWORD}"
+    AGENT_IP="${AGENT_IP}"
 )
 
 SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")

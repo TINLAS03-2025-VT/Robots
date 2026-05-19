@@ -5,97 +5,127 @@
 #include <rclc/executor.h>
 #include "pico/cyw43_arch.h"
 #include "interface/interface.h"
-#include <geometry_msgs/msg/twist.h>
 
-//#define INTERFACE_UART
+// ROS Message types
+#include <geometry_msgs/msg/pose_array.h>
+#include <nav_msgs/msg/path.h>
+
 #define INTERFACE_WIFI
 
-rcl_timer_t timer;
+// ROS 2 Structures
 rcl_node_t node;
 rcl_allocator_t allocator;
 rclc_support_t support;
 rclc_executor_t executor;
 
-rcl_subscription_t subscriber;
-geometry_msgs__msg__Twist msg;
+// Subscription for positions from Game Master
+rcl_subscription_t pos_sub;
+geometry_msgs__msg__PoseArray pos_msg;
 
-// --- board ---
-#define LED_A CYW43_WL_GPIO_LED_PIN
+// // Publisher for this robot's intended path
+// rcl_publisher_t path_pub;
+// nav_msgs__msg__Path my_path_msg;
 
-bool recieved_flag = false;
+// // Subscription for the OTHER hunter's path (e.g., hunter_2)
+// rcl_subscription_t other_hunter_sub;
+// nav_msgs__msg__Path other_hunter_path_msg;
 
-// --- micro-ROS ---
-// Timer callback
-void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
+// Memory allocation limits for Micro-ROS sequences
+#define MAX_ROBOTS_IN_GAME 5
+#define MAX_PATH_POINTS 20
+
+// ROS Node identifiers
+// #define HUNTER_NUM 0
+char* node_name = "robot";
+char* node_namespace = "pico_0";
+
+uint agent_port = 8888;
+
+// Callback: Game Master sent updated positions
+void pos_callback(const void *msgin)
 {
-    (void)timer;
-    (void)last_call_time;
+    printf("Received message on the POSITION Topic! \n");
+    const geometry_msgs__msg__PoseArray *msg = (const geometry_msgs__msg__PoseArray *)msgin;
 
-    (recieved_flag) ? (recieved_flag = false) : (gpio_put(LED_A, 0));
+    if (msg->poses.size > 0 && msg->poses.size < MAX_ROBOTS_IN_GAME) {
+        double my_x = msg->poses.data[0].position.x;
+        double my_y = msg->poses.data[0].position.y;
+        printf("Received %d poses. Robot %s is at: (%.2f, %.2f)\n", msg->poses.size, node_namespace, my_x, my_y);
+    } else {
+        printf("Received an empty PoseArray!\n");
+    }
 }
 
-// Twist subscription callback
-void subscription_callback(const void *msgin)
+// Callback: Received the other hunter's path
+void other_hunter_path_callback(const void *msgin)
 {
-    recieved_flag = true;
-    const geometry_msgs__msg__Twist *msg = (const geometry_msgs__msg__Twist *)msgin;
-
-    gpio_put(LED_A, (msg->linear.x > 0) ? 1 : 0);
+    const nav_msgs__msg__Path *msg = (const nav_msgs__msg__Path *)msgin;
 }
-
 
 int main()
 {
-    #if defined(INTERFACE_WIFI)
-        set_microros_wifi_transports("mees", "meeskees", "10.45.140.138", 8888);
-    #elif defined(INTERFACE_UART)
-        rmw_uros_set_custom_transport(
-            true,
-            NULL,
-            pico_serial_transport_open,
-            pico_serial_transport_close,
-            pico_serial_transport_write,
-            pico_serial_transport_read
-        );
-    #endif
+    stdio_init_all();
 
-    gpio_init(LED_A);
-    gpio_set_dir(LED_A, GPIO_OUT);
+    sleep_ms(3000);
+
+    printf("Bababoeyyyy \n");
+
+    #if defined(INTERFACE_WIFI)
+        set_microros_wifi_transports(WIFI_SSID, WIFI_PASSWORD, AGENT_IP, agent_port);
+    #endif
 
     allocator = rcl_get_default_allocator();
 
-    const int timeout_ms = 1000; 
-    const uint8_t attempts = 120;
+    // 1. Memory Pre-allocation for Incoming Game Data (PoseArray)
+    static geometry_msgs__msg__Pose storage_poses[MAX_ROBOTS_IN_GAME];
+    pos_msg.poses.data = storage_poses;
+    pos_msg.poses.capacity = MAX_ROBOTS_IN_GAME;
+    pos_msg.poses.size = 0;
 
-    rcl_ret_t ret = rmw_uros_ping_agent(timeout_ms, attempts);
+    // // 2. Memory Pre-allocation for Incoming/Outgoing Paths
+    // static geometry_msgs__msg__PoseStamped storage_my_path[MAX_PATH_POINTS];
+    // my_path_msg.poses.data = storage_my_path;
+    // my_path_msg.poses.capacity = MAX_PATH_POINTS;
+    // my_path_msg.poses.size = 0;
 
-    if (ret != RCL_RET_OK)
-    {
-        return ret;
-    }
+    // static geometry_msgs__msg__PoseStamped storage_other_path[MAX_PATH_POINTS];
+    // other_hunter_path_msg.poses.data = storage_other_path;
+    // other_hunter_path_msg.poses.capacity = MAX_PATH_POINTS;
+    // other_hunter_path_msg.poses.size = 0;
+
+    // Wait for micro-ROS Agent
+    if (rmw_uros_ping_agent(1000, 120) != RCL_RET_OK) return -1;
 
     rclc_support_init(&support, 0, NULL, &allocator);
-    rclc_node_init_default(&node, "pico_node", "", &support);
+    rclc_node_init_default(&node, node_name, node_namespace, &support);
 
+    // Initialize Subscriptions and Publishers
     rclc_subscription_init_default(
-        &subscriber,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
-        "cmd_vel");
+        &pos_sub, &node,
+        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray), "pos");
 
-    rclc_timer_init_default(
-        &timer,
-        &support,
-        RCL_MS_TO_NS(1000),
-        timer_callback);
+    // rclc_subscription_init_default(
+    //     &other_hunter_sub, &node,
+    //     ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Path), "/hunter_2/path"); // Global topic to hear peer
 
-    rclc_executor_init(&executor, &support.context, 2, &allocator);
-    rclc_executor_add_timer(&executor, &timer);
-    rclc_executor_add_subscription(&executor, &subscriber, &msg, &subscription_callback, ON_NEW_DATA);
+    // rclc_publisher_init_default(
+    //     &path_pub, &node,
+    //     ROSIDL_GET_MSG_TYPE_SUPPORT(nav_msgs, msg, Path), "path"); // Resolves to /hunter_1/path
+
+    // Executor Configuration: We have 2 subscriptions to manage
+    rclc_executor_init(&executor, &support.context, 1, &allocator);
+    rclc_executor_add_subscription(&executor, &pos_sub, &pos_msg, &pos_callback, ON_NEW_DATA);
+    // rclc_executor_add_subscription(&executor, &other_hunter_sub, &other_hunter_path_msg, &other_hunter_path_callback, ON_NEW_DATA);
 
     while (true)
     {
-        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100));
+        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50));
+        
+        // Loop Sequence:
+        // 1. Check if new pos or peer paths arrived (handled by callbacks)
+        // 2. Run pathfinding math if data updated
+        // 3. Periodically publish your calculated path using:
+        //    rcl_publish(&path_pub, &my_path_msg, NULL);
     }
     return 0;
 }
