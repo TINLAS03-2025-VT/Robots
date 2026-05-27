@@ -1,0 +1,7 @@
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/pioasm.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/edit_cache.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/rebuild_cache.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/list_install_components.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/install.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/install/local.dir
+/home/mees/Documents/Hogeschool/TINLAS/microros_test/wifi_uros_pico_test/pioasm/CMakeFiles/install/strip.dir
