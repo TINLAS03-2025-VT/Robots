@@ -3,8 +3,11 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(PICO_PLATFORM rp2350)
-set(PICO_BOARD pico2_w)
+set(PICO_PLATFORM rp2040)
+set(PICO_BOARD pico_w)
+
+set(picotool_DIR "./picotool")
+find_package(picotool REQUIRED)
 
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 

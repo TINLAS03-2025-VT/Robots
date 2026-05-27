@@ -10,9 +10,6 @@ size_t pico_wifi_transport_read(struct uxrCustomTransport *transport, uint8_t *b
 
 static inline bool set_microros_wifi_transports(char *ssid, char *pass, char *agent_ip, uint agent_port)
 {
-
-        stdio_init_all();
-
     if (cyw43_arch_init())
     {
         printf("failed to initialise\n");

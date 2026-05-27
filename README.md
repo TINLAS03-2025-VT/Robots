@@ -17,8 +17,7 @@ Used for testing whether messages come through to the Pico with the MicroROS age
 cd wifi_uros_pico_test/build
 cmake -DWIFI_SSID={YOUR_SSID} -DWIFI_PASSWORD={YOUR_PASSWORD} -DAGENT_IP={YOUR_AGENT_IP} ..
 make
-# Set PICO in boot mode and connect with USB, reconnect if it was already connected
-cp main.uf2 /run/media/$USER/RP2350/  # Change to the corrects mountpoint of the pico
+./picotool/picotool load -f -x ./main.uf2  # First time: plug pico in in boot mode, copy main.uf2 onto the pico. After this, this command flashes automatically except for a panic on the pico
 ```
 5. Open a Serial Monitor and keep listening on the pico's serial. If it says "failed to connect", reconnect the pico (without setting it in boot mode)
 4. Run the MicroROS Agent:
@@ -35,7 +34,7 @@ ros2 topic list
 ```
 7. Send a PoseArray to the pico's topic, it should recognize 2 Poses and print in the serial monitor: *"Received message on the POSITION Topic!Received 2 poses. Robot 0 is at: (1.20, 3.40)"*
 ```bash
-ros2 topic pub --once /pico_0/pos geometry_msgs/msg/PoseArray "{
+ros2 topic pub --once /robots/pos geometry_msgs/msg/PoseArray "{
   header: {stamp: {sec: 0, nanosec: 0}, frame_id: 'map'},
   poses: [
     {position: {x: 1.2, y: 3.4, z: 0.0}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}},
