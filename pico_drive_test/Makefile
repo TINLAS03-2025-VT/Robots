@@ -4482,53 +4482,29 @@ interface/common/transport_common.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/common/transport_common.c.s
 .PHONY : interface/common/transport_common.c.s
 
-interface/uart/pico_uart_transport.o: interface/uart/pico_uart_transport.c.o
-.PHONY : interface/uart/pico_uart_transport.o
+interface/movement/movement.o: interface/movement/movement.c.o
+.PHONY : interface/movement/movement.o
 
 # target to build an object file
-interface/uart/pico_uart_transport.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/uart/pico_uart_transport.c.o
-.PHONY : interface/uart/pico_uart_transport.c.o
+interface/movement/movement.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/movement/movement.c.o
+.PHONY : interface/movement/movement.c.o
 
-interface/uart/pico_uart_transport.i: interface/uart/pico_uart_transport.c.i
-.PHONY : interface/uart/pico_uart_transport.i
-
-# target to preprocess a source file
-interface/uart/pico_uart_transport.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/uart/pico_uart_transport.c.i
-.PHONY : interface/uart/pico_uart_transport.c.i
-
-interface/uart/pico_uart_transport.s: interface/uart/pico_uart_transport.c.s
-.PHONY : interface/uart/pico_uart_transport.s
-
-# target to generate assembly for a file
-interface/uart/pico_uart_transport.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/uart/pico_uart_transport.c.s
-.PHONY : interface/uart/pico_uart_transport.c.s
-
-interface/wifi/pico_wifi_transport.o: interface/wifi/pico_wifi_transport.c.o
-.PHONY : interface/wifi/pico_wifi_transport.o
-
-# target to build an object file
-interface/wifi/pico_wifi_transport.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/wifi/pico_wifi_transport.c.o
-.PHONY : interface/wifi/pico_wifi_transport.c.o
-
-interface/wifi/pico_wifi_transport.i: interface/wifi/pico_wifi_transport.c.i
-.PHONY : interface/wifi/pico_wifi_transport.i
+interface/movement/movement.i: interface/movement/movement.c.i
+.PHONY : interface/movement/movement.i
 
 # target to preprocess a source file
-interface/wifi/pico_wifi_transport.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/wifi/pico_wifi_transport.c.i
-.PHONY : interface/wifi/pico_wifi_transport.c.i
+interface/movement/movement.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/movement/movement.c.i
+.PHONY : interface/movement/movement.c.i
 
-interface/wifi/pico_wifi_transport.s: interface/wifi/pico_wifi_transport.c.s
-.PHONY : interface/wifi/pico_wifi_transport.s
+interface/movement/movement.s: interface/movement/movement.c.s
+.PHONY : interface/movement/movement.s
 
 # target to generate assembly for a file
-interface/wifi/pico_wifi_transport.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/wifi/pico_wifi_transport.c.s
-.PHONY : interface/wifi/pico_wifi_transport.c.s
+interface/movement/movement.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/main.dir/build.make CMakeFiles/main.dir/interface/movement/movement.c.s
+.PHONY : interface/movement/movement.c.s
 
 main.o: main.c.o
 .PHONY : main.o
@@ -5104,12 +5080,9 @@ help:
 	@echo "... interface/common/transport_common.o"
 	@echo "... interface/common/transport_common.i"
 	@echo "... interface/common/transport_common.s"
-	@echo "... interface/uart/pico_uart_transport.o"
-	@echo "... interface/uart/pico_uart_transport.i"
-	@echo "... interface/uart/pico_uart_transport.s"
-	@echo "... interface/wifi/pico_wifi_transport.o"
-	@echo "... interface/wifi/pico_wifi_transport.i"
-	@echo "... interface/wifi/pico_wifi_transport.s"
+	@echo "... interface/movement/movement.o"
+	@echo "... interface/movement/movement.i"
+	@echo "... interface/movement/movement.s"
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"

@@ -1,3 +1,5 @@
 /build
 pico-sdk
 generated
+Makefile
+compile_commands.json

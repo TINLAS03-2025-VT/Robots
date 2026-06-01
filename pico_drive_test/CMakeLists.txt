@@ -20,9 +20,8 @@ pico_sdk_init()
 link_directories(libmicroros)
 add_executable(main
     main.c
+    interface/movement/movement.c
     interface/common/transport_common.c
-    interface/wifi/pico_wifi_transport.c
-    interface/uart/pico_uart_transport.c
 )
 target_link_libraries(main
     hardware_pwm

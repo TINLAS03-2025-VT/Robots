@@ -352,8 +352,7 @@ set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "/home/mees/pico-sdk/src/rp2_common/pico_stdlib/stdlib.c" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_stdlib/stdlib.c.o" "gcc" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_stdlib/stdlib.c.o.d"
   "/home/mees/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c.o" "gcc" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_unique_id/unique_id.c.o.d"
   "/home/mees/Documents/Hogeschool/TINLAS/robots/pico_drive_test/interface/common/transport_common.c" "CMakeFiles/main.dir/interface/common/transport_common.c.o" "gcc" "CMakeFiles/main.dir/interface/common/transport_common.c.o.d"
-  "/home/mees/Documents/Hogeschool/TINLAS/robots/pico_drive_test/interface/uart/pico_uart_transport.c" "CMakeFiles/main.dir/interface/uart/pico_uart_transport.c.o" "gcc" "CMakeFiles/main.dir/interface/uart/pico_uart_transport.c.o.d"
-  "/home/mees/Documents/Hogeschool/TINLAS/robots/pico_drive_test/interface/wifi/pico_wifi_transport.c" "CMakeFiles/main.dir/interface/wifi/pico_wifi_transport.c.o" "gcc" "CMakeFiles/main.dir/interface/wifi/pico_wifi_transport.c.o.d"
+  "/home/mees/Documents/Hogeschool/TINLAS/robots/pico_drive_test/interface/movement/movement.c" "CMakeFiles/main.dir/interface/movement/movement.c.o" "gcc" "CMakeFiles/main.dir/interface/movement/movement.c.o.d"
   "/home/mees/Documents/Hogeschool/TINLAS/robots/pico_drive_test/main.c" "CMakeFiles/main.dir/main.c.o" "gcc" "CMakeFiles/main.dir/main.c.o.d"
   "/home/mees/pico-sdk/src/rp2_common/pico_cxx_options/new_delete.cpp" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_cxx_options/new_delete.cpp.o" "gcc" "CMakeFiles/main.dir/home/mees/pico-sdk/src/rp2_common/pico_cxx_options/new_delete.cpp.o.d"
   )
