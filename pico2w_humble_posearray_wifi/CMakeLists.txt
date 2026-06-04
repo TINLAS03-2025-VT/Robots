@@ -9,14 +9,19 @@ link_directories(libmicroros)
 add_executable(pico_micro_ros_example
     pico_micro_ros_example.c
     picow_udp_transports.c
+	robot/movement.c
 )
 target_link_libraries(pico_micro_ros_example
     pico_stdlib
     microros
     pico_cyw43_arch_lwip_threadsafe_background
+	hardware_pwm
+	m
 )
 target_include_directories(pico_micro_ros_example
-    PRIVATE ${CMAKE_CURRENT_LIST_DIR}
+    PRIVATE
+	  ${CMAKE_CURRENT_LIST_DIR}
+	  ${CMAKE_CURRENT_LIST_DIR}/robot
     PUBLIC
       libmicroros/include
 )
