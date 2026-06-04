@@ -41,6 +41,10 @@ rclc_executor_t executor;
 static char frame_id_buffer[FRAME_ID_CAPACITY];
 static uint32_t posearray_rx_count = 0;
 
+static volatile bool posearray_new_data = false;
+static geometry_msgs__msg__Pose target_pose;
+static int robot_num = 0;
+
 // --- Timer callback: publishes incrementing counter ---
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
 {
@@ -57,6 +61,7 @@ void posearray_callback(const void *msgin)
     const geometry_msgs__msg__PoseArray *msg = (const geometry_msgs__msg__PoseArray *)msgin;
 
     posearray_rx_count++;
+    posearray_new_data = true;
 
     printf("posearray received %lu, poses=%u\n",
            (unsigned long)posearray_rx_count,
@@ -159,10 +164,22 @@ int main()
     init_servo_pwm(PWM_LM);
     init_servo_pwm(PWM_RM);
     stop();
+	
+	set_pose(&target_pose, 0.0, 0.0, 0.0);
 
     while (true) {
-        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+
+    if (posearray_new_data) {
+        posearray_new_data = false;
+
+        if (posearray_msg.poses.size > robot_num) {
+            move_to(&posearray_msg.poses.data[robot_num], &target_pose);
+        } else {
+            stop();
+        }
     }
+}
 
     cyw43_arch_deinit();
     return 0;
