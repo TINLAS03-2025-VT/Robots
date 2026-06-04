@@ -276,10 +276,27 @@ double calculate_distance(geometry_msgs__msg__Pose *own_pos,
 // forward based on DEADZONE
 void move_to(geometry_msgs__msg__Pose *own_pos,
              geometry_msgs__msg__Pose *target_pos) {
-  if (calculate_distance(own_pos, target_pos) <= MIN_DISTANCE) {
+  static uint32_t last_debug_ms = 0;
+  static int last_action = -1; // 0 = stop, 1 = turn left, 2 = turn right, 3 = move forward
+
+  uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+
+  double distance = calculate_distance(own_pos, target_pos);
+
+  if (distance <= MIN_DISTANCE) {
     stop();
+
+    int action = 0;
+    if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
+      printf("[MOVE] stop: target reached, distance=%.3f <= MIN_DISTANCE=%.3f\n",
+             distance, (double)MIN_DISTANCE);
+      last_debug_ms = now_ms;
+      last_action = action;
+    }
+
     return;
   }
+
   double yaw = rad_to_deg(quaternion_to_yaw(&own_pos->orientation));
   double angle_to_target =
       rad_to_deg(atan2(target_pos->position.y - own_pos->position.y,
@@ -294,10 +311,32 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
 
   // Check if the relative error is greater than the allowed deadzone
   if (fabs(delta_angle) > DEADZONE) {
-    //printf(" Decision: Turning; delta_angle: %0.2f \n", delta_angle);
+    int action = (delta_angle > 0.0) ? 2 : 1;
+
+    if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
+      if (delta_angle > 0.0) {
+        printf("[MOVE] turn right: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n",
+               distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
+      } else {
+        printf("[MOVE] turn left: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n",
+               distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
+      }
+
+      last_debug_ms = now_ms;
+      last_action = action;
+    }
+
     turn_continuoous(delta_angle, 1);
   } else {
-    //printf(" Decision: Moving forward\n");
+    int action = 3;
+
+    if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
+      printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f within DEADZONE=%.2f\n",
+             distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
+      last_debug_ms = now_ms;
+      last_action = action;
+    }
+
     move_continuous(1, 1);
   }
 }

@@ -25,6 +25,14 @@ target_include_directories(pico_micro_ros_example
     PUBLIC
       libmicroros/include
 )
+
+target_compile_definitions(pico_micro_ros_example PRIVATE
+    WIFI_SSID="${WIFI_SSID}"
+    WIFI_PASSWORD="${WIFI_PASSWORD}"
+    AGENT_IP="${AGENT_IP}"
+    AGENT_PORT=${AGENT_PORT}
+)
+
 SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
 SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
 # Configure Pico

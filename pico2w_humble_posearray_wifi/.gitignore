@@ -1,15 +1,24 @@
+# Build output
 build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Firmware/output artifacts
 *.uf2
 *.elf
 *.bin
 *.hex
 *.map
 *.dis
-*.uf2
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-.DS_Store
-.vscode/
+
+# Local dependency copied in for builds, not committed
 libmicroros/
+
+# Editor/system files
+.vscode/
+.DS_Store
+
+# Windows downloaded-file metadata
+*:Zone.Identifier

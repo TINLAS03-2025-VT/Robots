@@ -13,11 +13,33 @@
 #include "picow_udp_transports.h"
 #include "pico/cyw43_arch.h"
 
+// Movement
 #include "movement.h"
+#include "settings.h"
 
 // --- WiFi credentials ---
-char ssid[] = "dana";      // Edit this
-char pass[] = "maaikedana"; //Edit this
+#ifndef WIFI_SSID
+#define WIFI_SSID "YOUR_WIFI_SSID"
+#endif
+
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+#endif
+
+#ifndef AGENT_IP
+#define AGENT_IP "YOUR_AGENT_IP"
+#endif
+
+#ifndef AGENT_PORT
+#define AGENT_PORT 8888
+#endif
+
+// --- WiFi credentials ---
+char ssid[] = WIFI_SSID;
+char pass[] = WIFI_PASSWORD;
+
+// Kept for compatibility with the old movement app naming.
+uint agent_port = AGENT_PORT;
 
 #ifndef POSE_CAPACITY
 #define POSE_CAPACITY 8
@@ -27,11 +49,13 @@ char pass[] = "maaikedana"; //Edit this
 #define FRAME_ID_CAPACITY 64
 #endif
 
+#define MAX_ROBOTS_IN_GAME 5
+
 // --- micro-ROS objects ---
 rcl_publisher_t publisher;
 rcl_subscription_t posearray_subscriber;
 std_msgs__msg__UInt64 pub_msg;
-geometry_msgs__msg__PoseArray posearray_msg;
+geometry_msgs__msg__PoseArray all_robot_positions;
 rcl_node_t node;
 rcl_allocator_t allocator;
 rclc_support_t support;
@@ -41,9 +65,8 @@ rclc_executor_t executor;
 static char frame_id_buffer[FRAME_ID_CAPACITY];
 static uint32_t posearray_rx_count = 0;
 
-static volatile bool posearray_new_data = false;
-static geometry_msgs__msg__Pose target_pose;
-static int robot_num = 0;
+// Robot identifier from old movement app
+uint8_t robot_num = 0;
 
 // --- Timer callback: publishes incrementing counter ---
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
@@ -61,7 +84,6 @@ void posearray_callback(const void *msgin)
     const geometry_msgs__msg__PoseArray *msg = (const geometry_msgs__msg__PoseArray *)msgin;
 
     posearray_rx_count++;
-    posearray_new_data = true;
 
     printf("posearray received %lu, poses=%u\n",
            (unsigned long)posearray_rx_count,
@@ -103,20 +125,20 @@ void setup_ros()
     // Publish every 1000ms
     rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(1000), timer_callback);
 
-    geometry_msgs__msg__PoseArray__init(&posearray_msg);
-    geometry_msgs__msg__Pose__Sequence__init(&posearray_msg.poses, POSE_CAPACITY);
+    geometry_msgs__msg__PoseArray__init(&all_robot_positions);
+    geometry_msgs__msg__Pose__Sequence__init(&all_robot_positions.poses, MAX_ROBOTS_IN_GAME);
 
-    posearray_msg.header.frame_id.data = frame_id_buffer;
-    posearray_msg.header.frame_id.size = 0;
-    posearray_msg.header.frame_id.capacity = FRAME_ID_CAPACITY;
-    posearray_msg.header.frame_id.data[0] = '\0';
+    all_robot_positions.header.frame_id.data = frame_id_buffer;
+    all_robot_positions.header.frame_id.size = 0;
+    all_robot_positions.header.frame_id.capacity = FRAME_ID_CAPACITY;
+    all_robot_positions.header.frame_id.data[0] = '\0';
 
     rclc_executor_init(&executor, &support.context, 2, &allocator);
     rclc_executor_add_timer(&executor, &timer);
     rclc_executor_add_subscription(
         &executor,
         &posearray_subscriber,
-        &posearray_msg,
+        &all_robot_positions,
         &posearray_callback,
         ON_NEW_DATA
     );
@@ -161,25 +183,22 @@ int main()
     pub_msg.data = 0;
     setup_ros();
 
+    // Initialize continuous PWM channels
     init_servo_pwm(PWM_LM);
     init_servo_pwm(PWM_RM);
-    stop();
-	
-	set_pose(&target_pose, 0.0, 0.0, 0.0);
+
+    geometry_msgs__msg__Pose target;
+
+    set_pose(&target, 0.0, 0.0, 0.0);
 
     while (true) {
-    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
 
-    if (posearray_new_data) {
-        posearray_new_data = false;
-
-        if (posearray_msg.poses.size > robot_num) {
-            move_to(&posearray_msg.poses.data[robot_num], &target_pose);
-        } else {
-            stop();
+        if (all_robot_positions.poses.size > 0 &&
+            (size_t)robot_num < all_robot_positions.poses.size) {
+            move_to(&all_robot_positions.poses.data[robot_num], &target);
         }
     }
-}
 
     cyw43_arch_deinit();
     return 0;
