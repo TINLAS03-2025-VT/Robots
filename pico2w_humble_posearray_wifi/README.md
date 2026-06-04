@@ -500,3 +500,211 @@ GND    = common ground
 ~~~
 
 Neutral/stop should be around a 1.5 ms pulse at 50 Hz.
+
+## micro-ROS reconnect fixes
+
+This firmware is intended to handle Pico reboot/reconnect cycles better than the default micro-ROS setup.
+
+Two fixes are used:
+
+~~~text
+1. Hard Liveliness Check in the micro-ROS Client library
+2. A fixed micro-ROS Client Key in the firmware
+~~~
+
+### Why this is needed
+
+When the Pico 2 W is rebooted, unplugged, or reflashed, the micro-ROS Agent and ROS 2 graph may temporarily keep the old node alive.
+
+This can make `ros2 node list` show multiple stale `pico_node` entries after several Pico reboots.
+
+The two fixes below reduce that problem:
+
+- Hard Liveliness lets the Agent detect that the Pico client is gone and remove its entities.
+- A fixed Client Key makes the Pico identify itself consistently across reboots.
+
+## Hard Liveliness Check
+
+Hard Liveliness Check is not enabled only by changing the firmware source. It must be compiled into `libmicroros`.
+
+The firmware project does not commit `libmicroros/`, so this is a local build step.
+
+### Build custom Humble libmicroros with Hard Liveliness
+
+Clone a clean Humble micro-ROS Pico SDK repo:
+
+~~~bash
+cd ~/micro_ros_ws/src
+
+rm -rf micro_ros_raspberrypi_pico_sdk_hard_liveliness
+
+git clone -b humble https://github.com/micro-ROS/micro_ros_raspberrypi_pico_sdk.git micro_ros_raspberrypi_pico_sdk_hard_liveliness
+
+cd ~/micro_ros_ws/src/micro_ros_raspberrypi_pico_sdk_hard_liveliness
+~~~
+
+Patch `colcon.meta`:
+
+~~~bash
+python3 - <<'PY'
+from pathlib import Path
+import json
+
+p = Path("microros_static_library/library_generation/colcon.meta")
+data = json.loads(p.read_text())
+
+args = data["names"]["microxrcedds_client"]["cmake-args"]
+
+for flag in [
+    "-DUCLIENT_HARD_LIVELINESS_CHECK=ON",
+    "-DUCLIENT_HARD_LIVELINESS_CHECK_TIMEOUT=1000",
+]:
+    if flag not in args:
+        args.append(flag)
+
+p.write_text(json.dumps(data, indent=2) + "\n")
+PY
+~~~
+
+Verify:
+
+~~~bash
+grep -n "HARD_LIVELINESS" microros_static_library/library_generation/colcon.meta
+~~~
+
+Expected:
+
+~~~text
+-DUCLIENT_HARD_LIVELINESS_CHECK=ON
+-DUCLIENT_HARD_LIVELINESS_CHECK_TIMEOUT=1000
+~~~
+
+Make the builder script executable:
+
+~~~bash
+chmod +x microros_static_library/library_generation/library_generation.sh
+~~~
+
+Run the builder:
+
+~~~bash
+docker run --rm \
+  -v $(pwd):/project \
+  microros/micro_ros_static_library_builder:humble
+~~~
+
+Verify output:
+
+~~~bash
+ls libmicroros/libmicroros.a
+ls libmicroros/include/rcl/rcl.h
+ls libmicroros/include/rmw_microros/rmw_microros.h
+~~~
+
+Copy the custom `libmicroros` into this firmware folder:
+
+~~~bash
+cd ~/TINLAS_Robots_live_movement_integration/pico2w_humble_posearray_wifi
+
+rm -rf libmicroros
+
+cp -r ~/micro_ros_ws/src/micro_ros_raspberrypi_pico_sdk_hard_liveliness/libmicroros .
+~~~
+
+Do not commit `libmicroros/`; it is intentionally ignored by Git.
+
+### Hard Liveliness timeout
+
+The current recommended timeout is:
+
+~~~text
+1000 ms
+~~~
+
+If the Pico is falsely removed during normal Wi-Fi jitter, rebuild the custom `libmicroros` with:
+
+~~~text
+-DUCLIENT_HARD_LIVELINESS_CHECK_TIMEOUT=2000
+~~~
+
+## Fixed micro-ROS Client Key
+
+The firmware should use a fixed Client Key so the Pico identifies itself consistently to the micro-ROS Agent.
+
+The key is configured at build time:
+
+~~~bash
+-DMICRO_ROS_CLIENT_KEY=0xC0FFEE01
+~~~
+
+Use a unique key per robot:
+
+~~~text
+robot 0: 0xC0FFEE01
+robot 1: 0xC0FFEE02
+robot 2: 0xC0FFEE03
+robot 3: 0xC0FFEE04
+robot 4: 0xC0FFEE05
+~~~
+
+Do not run multiple robots with the same Client Key at the same time.
+
+## Build with fixed Client Key
+
+Example full build:
+
+~~~bash
+cd ~/TINLAS_Robots_live_movement_integration/pico2w_humble_posearray_wifi
+
+rm -rf build
+mkdir build
+cd build
+
+cmake .. \
+  -DPICO_BOARD=pico2_w \
+  -DWIFI_SSID='YOUR_WIFI_SSID' \
+  -DWIFI_PASSWORD='YOUR_WIFI_PASSWORD' \
+  -DAGENT_IP='YOUR_AGENT_IP' \
+  -DAGENT_PORT=8888 \
+  -DMICRO_ROS_CLIENT_KEY=0xC0FFEE01
+
+make -j$(nproc)
+~~~
+
+## Testing reconnect behavior
+
+Start the Agent with verbose logging:
+
+~~~bash
+docker stop uros-agent 2>/dev/null || true
+
+docker run --rm -it \
+  --name uros-agent \
+  --net=host \
+  microros/micro-ros-agent:humble udp4 --port 8888 -v6
+~~~
+
+In another terminal, watch the ROS graph:
+
+~~~bash
+docker run --rm -it --net=host ros:humble-ros-base bash
+~~~
+
+Inside the container:
+
+~~~bash
+source /opt/ros/humble/setup.bash
+
+watch -n 0.5 ros2 node list
+~~~
+
+Now reboot or unplug the Pico.
+
+Expected behavior:
+
+~~~text
+The stale pico_node should disappear after roughly the configured Hard Liveliness timeout.
+When the Pico boots again, it should reconnect using the same fixed Client Key.
+Repeated Pico reboots should no longer accumulate many ghost pico_node entries.
+~~~
+

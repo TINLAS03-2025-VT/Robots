@@ -31,6 +31,7 @@ target_compile_definitions(pico_micro_ros_example PRIVATE
     WIFI_PASSWORD="${WIFI_PASSWORD}"
     AGENT_IP="${AGENT_IP}"
     AGENT_PORT=${AGENT_PORT}
+    MICRO_ROS_CLIENT_KEY=${MICRO_ROS_CLIENT_KEY}
 )
 
 SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")

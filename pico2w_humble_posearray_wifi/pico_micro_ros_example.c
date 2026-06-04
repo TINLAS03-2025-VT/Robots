@@ -38,6 +38,10 @@
 char ssid[] = WIFI_SSID;
 char pass[] = WIFI_PASSWORD;
 
+#ifndef MICRO_ROS_CLIENT_KEY
+#define MICRO_ROS_CLIENT_KEY 0xC0FFEE01
+#endif
+
 // Kept for compatibility with the old movement app naming.
 uint agent_port = AGENT_PORT;
 
@@ -104,9 +108,17 @@ void setup_transport()
 
 void setup_ros()
 {
-    allocator = rcl_get_default_allocator();
-    rclc_support_init(&support, 0, NULL, &allocator);
-    rclc_node_init_default(&node, "pico_node", "", &support);
+   allocator = rcl_get_default_allocator();
+
+   rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+   rcl_init_options_init(&init_options, allocator);
+
+   rmw_init_options_t *rmw_options = rcl_init_options_get_rmw_init_options(&init_options);
+   rmw_uros_options_set_client_key(MICRO_ROS_CLIENT_KEY, rmw_options);
+
+   rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
+
+   rclc_node_init_default(&node, "pico_node", "", &support);
 
     rclc_publisher_init_best_effort(
         &publisher,
