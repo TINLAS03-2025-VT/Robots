@@ -13,6 +13,8 @@
 #include "picow_udp_transports.h"
 #include "pico/cyw43_arch.h"
 
+#include "movement.h"
+
 // --- WiFi credentials ---
 char ssid[] = "dana";      // Edit this
 char pass[] = "maaikedana"; //Edit this
@@ -153,6 +155,10 @@ int main()
 
     pub_msg.data = 0;
     setup_ros();
+
+    init_servo_pwm(PWM_LM);
+    init_servo_pwm(PWM_RM);
+    stop();
 
     while (true) {
         rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
