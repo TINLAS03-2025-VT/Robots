@@ -1,0 +1,39 @@
+Drop-in QoL port files.
+
+Copy these into:
+  ~/TINLAS_Robots_live_movement_integration/pico2w_humble_posearray_wifi/
+
+Included:
+  pico_micro_ros_example.c
+  CMakeLists.txt
+  libdiy/log/log.h
+  test/test_point_to_point.c
+  .vscode/*
+  picotool/*
+
+The main file keeps the working picow_udp_transports Wi-Fi/UDP/micro-ROS stack and ports the approved old QoL patterns:
+  startup logging
+  HARDCHECK/watchdog reboot
+  Wi-Fi retry pattern
+  Agent ping retry pattern
+  ROS init return-value checks
+  per-robot node naming and namespace
+  /robots/pos topic
+  best-effort QoS
+  ON_NEW_DATA
+  /pico_counter heartbeat
+  fixed micro-ROS client key
+  5 ms executor spin
+  startup delay
+  runner variable
+  Wi-Fi link-status reconnect check
+
+Not included/changed because excluded:
+  old interface/common
+  old interface/wifi
+  old interface/uart
+  old CMake glob for interface/*.c
+  old topic/callback trigger behavior
+  path/nav_msgs placeholders
+  old full README/assets/license changes
+  board default changes

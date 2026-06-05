@@ -1,4 +1,8 @@
 #include <stdio.h>
+#include <stdbool.h>
+#include <stddef.h>
+
+#include <hardware/watchdog.h>
 
 #include <rcl/rcl.h>
 #include <rcl/error_handling.h>
@@ -17,7 +21,9 @@
 #include "movement.h"
 #include "settings.h"
 
-// --- WiFi credentials ---
+// Handy logging functions etc. Copied from pico_drive_test.
+#include "libdiy/log/log.h"
+
 #ifndef WIFI_SSID
 #define WIFI_SSID "YOUR_WIFI_SSID"
 #endif
@@ -34,26 +40,23 @@
 #define AGENT_PORT 8888
 #endif
 
-// --- WiFi credentials ---
-char ssid[] = WIFI_SSID;
-char pass[] = WIFI_PASSWORD;
-
 #ifndef MICRO_ROS_CLIENT_KEY
 #define MICRO_ROS_CLIENT_KEY 0xC0FFEE01
-#endif
-
-// Kept for compatibility with the old movement app naming.
-uint agent_port = AGENT_PORT;
-
-#ifndef POSE_CAPACITY
-#define POSE_CAPACITY 8
 #endif
 
 #ifndef FRAME_ID_CAPACITY
 #define FRAME_ID_CAPACITY 64
 #endif
 
+// Memory allocation limits for Micro-ROS sequences
 #define MAX_ROBOTS_IN_GAME 5
+
+// --- WiFi credentials ---
+char ssid[] = WIFI_SSID;
+char pass[] = WIFI_PASSWORD;
+
+// Kept for compatibility with the old movement app naming.
+uint agent_port = AGENT_PORT;
 
 // --- micro-ROS objects ---
 rcl_publisher_t publisher;
@@ -66,11 +69,15 @@ rclc_support_t support;
 rcl_timer_t timer;
 rclc_executor_t executor;
 
+// ROS Node identifiers
+uint8_t robot_num = 0;
+char node_name[8];
+
+// Live Globals
+uint8_t runner = -1; // Changes to another robot's num, which is the runner
+
 static char frame_id_buffer[FRAME_ID_CAPACITY];
 static uint32_t posearray_rx_count = 0;
-
-// Robot identifier from old movement app
-uint8_t robot_num = 0;
 
 // --- Timer callback: publishes incrementing counter ---
 void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
@@ -82,16 +89,28 @@ void timer_callback(rcl_timer_t *timer, int64_t last_call_time)
     }
 }
 
-// --- Subscription callback: receives PoseArray ---
+// Callback: Game Master sent updated positions, save in all_robot_positions
 void posearray_callback(const void *msgin)
 {
-    const geometry_msgs__msg__PoseArray *msg = (const geometry_msgs__msg__PoseArray *)msgin;
+    (void) msgin;
 
     posearray_rx_count++;
 
+    printf("\nReceived message on the POSITION Topic! \n");
+
+    if (all_robot_positions.poses.size > robot_num) {
+        printf("Own robot position num [%d]: (%.2f , %.2f) \n\n", robot_num,
+               all_robot_positions.poses.data[robot_num].position.x,
+               all_robot_positions.poses.data[robot_num].position.y);
+    } else {
+        printf("[WARNING] PoseArray received, but robot_num [%d] is outside poses.size [%u]\n",
+               robot_num,
+               (unsigned int)all_robot_positions.poses.size);
+    }
+
     printf("posearray received %lu, poses=%u\n",
            (unsigned long)posearray_rx_count,
-           (unsigned int)msg->poses.size);
+           (unsigned int)all_robot_positions.poses.size);
 }
 
 void setup_transport()
@@ -106,94 +125,177 @@ void setup_transport()
     );
 }
 
-void setup_ros()
+void wifi_connect()
 {
-   allocator = rcl_get_default_allocator();
+    PRINT_DEBUG("Starting Wi-Fi and micro-ROS transport setup...");
 
-   rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-   rcl_init_options_init(&init_options, allocator);
+    bool transport_ready = false;
+    int wifi_retry_count = 0;
 
-   rmw_init_options_t *rmw_options = rcl_init_options_get_rmw_init_options(&init_options);
-   rmw_uros_options_set_client_key(MICRO_ROS_CLIENT_KEY, rmw_options);
+    while (!transport_ready) {
+        bool arch_started = false;
 
-   rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator);
+        if (cyw43_arch_init_with_country(CYW43_COUNTRY_NETHERLANDS) == 0) {
+            arch_started = true;
 
-   rclc_node_init_default(&node, "pico_node", "", &support);
+            // Disable CYW43 power-save mode.
+            //
+            // The radio defaults to a power-save mode that puts the chip to sleep
+            // after a 200 ms idle timer. For periodic micro-ROS traffic at message
+            // intervals slower than ~5 Hz, this imposes a wake-up penalty on every
+            // message, adding ~80 ms of latency. Disabling power save keeps the
+            // radio active and produces consistent latency across message rates.
+            //
+            // Comment out this line if you need to minimise power draw and your
+            // application does not need consistent low-latency communication.
+            cyw43_wifi_pm(&cyw43_state, CYW43_NO_POWERSAVE_MODE);
 
-    rclc_publisher_init_best_effort(
-        &publisher,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt64),
-        "pico_counter"
-    );
+            cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+            cyw43_arch_enable_sta_mode();
 
-    rclc_subscription_init_best_effort(
-        &posearray_subscriber,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray),
-        "/robots/pos"
-    );
+            if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000) == 0) {
+                setup_transport();
+                transport_ready = true;
+                PRINT_SUCCESS("Wi-Fi connected and micro-ROS transport configured!");
+                cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+            }
+        }
 
-    // Publish every 1000ms
-    rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(1000), timer_callback);
+        if (!transport_ready) {
+            wifi_retry_count++;
+            printf("[RETRY] Connection failed (%d/5). \n", wifi_retry_count);
+
+            if (arch_started) {
+                cyw43_arch_deinit();
+            }
+
+            sleep_ms(2000);
+
+            if (wifi_retry_count >= 5) {
+                HARDCHECK("Wi-Fi driver stuck or AP unavailable");
+            }
+        }
+    }
+}
+
+void ping_agent()
+{
+    // Test Micro-ROS agent connection
+    printf("Pinging MicroROS Agent... \n");
+
+    bool agent_connected = false;
+    int agent_retry_count = 0;
+
+    while (!agent_connected) {
+        // Ping agent. 100ms timeout, 3 attempts per ping.
+        if (rmw_uros_ping_agent(100, 3) == RCL_RET_OK) {
+            agent_connected = true;
+            PRINT_SUCCESS("Agent succesfully pinged!");
+        } else {
+            agent_retry_count++;
+            printf("[RETRY] Agent not found. Retrying (%d/10)...\n",
+                   agent_retry_count);
+            sleep_ms(1000);
+
+            if (agent_retry_count >= 10) {
+                HARDCHECK("Micro-ROS Agent is offline or unreachable");
+            }
+        }
+    }
+}
+
+void ros_init()
+{
+    allocator = rcl_get_default_allocator();
 
     geometry_msgs__msg__PoseArray__init(&all_robot_positions);
-    geometry_msgs__msg__Pose__Sequence__init(&all_robot_positions.poses, MAX_ROBOTS_IN_GAME);
+    if (!geometry_msgs__msg__Pose__Sequence__init(&all_robot_positions.poses,
+                                                  MAX_ROBOTS_IN_GAME)) {
+        HARDCHECK("Failed to allocate memory for robot positions sequence");
+    }
 
     all_robot_positions.header.frame_id.data = frame_id_buffer;
     all_robot_positions.header.frame_id.size = 0;
     all_robot_positions.header.frame_id.capacity = FRAME_ID_CAPACITY;
     all_robot_positions.header.frame_id.data[0] = '\0';
 
-    rclc_executor_init(&executor, &support.context, 2, &allocator);
-    rclc_executor_add_timer(&executor, &timer);
-    rclc_executor_add_subscription(
-        &executor,
-        &posearray_subscriber,
-        &all_robot_positions,
-        &posearray_callback,
-        ON_NEW_DATA
-    );
+    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+
+    if (rcl_init_options_init(&init_options, allocator) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize rcl init options");
+    }
+
+    rmw_init_options_t *rmw_options = rcl_init_options_get_rmw_init_options(&init_options);
+    rmw_uros_options_set_client_key(MICRO_ROS_CLIENT_KEY, rmw_options);
+
+    if (rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize rclc support");
+    }
+
+    snprintf(node_name, sizeof(node_name), "pico_%d", robot_num);
+    if (rclc_node_init_default(&node, node_name, "pico_namespace", &support) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize ROS2 Node");
+    }
+
+    if (rclc_publisher_init_best_effort(
+            &publisher,
+            &node,
+            ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, UInt64),
+            "pico_counter") != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize publisher");
+    }
+
+    // Initialize Subscription
+    char *pos_sub_str = "/cam/pos";
+    PRINT_DEBUG("Subscribing to: %s ", pos_sub_str);
+    if (rclc_subscription_init_best_effort(
+            &posearray_subscriber,
+            &node,
+            ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray),
+            pos_sub_str) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize subscription");
+    }
+
+    // Publish every 1000ms
+    if (rclc_timer_init_default(&timer, &support, RCL_MS_TO_NS(1000), timer_callback) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize timer");
+    }
+
+    // Initialize Executor
+    if (rclc_executor_init(&executor, &support.context, 2, &allocator) != RCL_RET_OK) {
+        HARDCHECK("Failed to initialize executor");
+    }
+
+    if (rclc_executor_add_timer(&executor, &timer) != RCL_RET_OK) {
+        HARDCHECK("Failed to add timer to executor");
+    }
+
+    if (rclc_executor_add_subscription(
+            &executor,
+            &posearray_subscriber,
+            &all_robot_positions,
+            &posearray_callback,
+            ON_NEW_DATA) != RCL_RET_OK) {
+        HARDCHECK("Failed to add subscription to executor");
+    }
+
+    PRINT_SUCCESS("Entire ROS initialization complete!");
 }
 
 int main()
 {
     stdio_init_all();
-    cyw43_arch_init_with_country(CYW43_COUNTRY_NETHERLANDS);
 
-    // Disable CYW43 power-save mode.
-    //
-    // The radio defaults to a power-save mode that puts the chip to sleep
-    // after a 200 ms idle timer. For periodic micro-ROS traffic at message
-    // intervals slower than ~5 Hz, this imposes a wake-up penalty on every
-    // message, adding ~80 ms of latency. Disabling power save keeps the
-    // radio active and produces consistent latency across message rates.
-    //
-    // Comment out this line if you need to minimise power draw and your
-    // application does not need consistent low-latency communication.
-    cyw43_wifi_pm(&cyw43_state, CYW43_NO_POWERSAVE_MODE);
+    PRINT_DEBUG("Start up... ");
 
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-    cyw43_arch_enable_sta_mode();
-    cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000);
+    sleep_ms(3000);
 
-    setup_transport();
+    wifi_connect(); // Try to connect to the WIFI given in CMake
 
-    // Wait for the micro-ROS agent to respond. Up to 60 attempts with a
-    // 1000 ms timeout each (~60 s total worst case, typically much less).
-    const int timeout_ms = 1000;
-    const uint8_t attempts = 60;
-    rcl_ret_t ret = 0;
-    int loop = 0;
-
-    for (; loop < attempts; loop++) {
-        ret = rmw_uros_ping_agent(timeout_ms, 1);
-        if (ret == RCL_RET_OK) break;
-    }
-    if (loop == attempts) return ret;
+    ping_agent(); // Ping microros agent
 
     pub_msg.data = 0;
-    setup_ros();
+    ros_init(); // Init everything for MicroROS
 
     // Initialize continuous PWM channels
     init_servo_pwm(PWM_LM);
@@ -203,8 +305,21 @@ int main()
 
     set_pose(&target, 0.0, 0.0, 0.0);
 
+    PRINT_DEBUG("Entering loop...");
     while (true) {
-        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
+        int link_status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
+        if (link_status != CYW43_LINK_UP) {
+            printf("[WARNING] Wi-Fi Link down! Retrying connection or resetting...\n");
+            if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass,
+                                                   CYW43_AUTH_WPA2_AES_PSK, 20000)) {
+                printf("failed to reconnect.\n");
+                continue;
+            } else {
+                printf("Connected.\n");
+            }
+        }
+
+        rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
 
         if (all_robot_positions.poses.size > 0 &&
             (size_t)robot_num < all_robot_positions.poses.size) {

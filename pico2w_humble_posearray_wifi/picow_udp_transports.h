@@ -9,8 +9,16 @@
 #include "lwip/pbuf.h"
 #include "lwip/udp.h"
 
-#define ROS_AGENT_UDP_PORT  (8888)
-#define ROS_AGENT_IP_ADDR   "149.143.42.77"    // You need modify IP
+#ifndef AGENT_IP
+#define AGENT_IP "YOUR_AGENT_IP"
+#endif
+
+#ifndef AGENT_PORT
+#define AGENT_PORT 8888
+#endif
+
+#define ROS_AGENT_IP_ADDR AGENT_IP
+#define ROS_AGENT_UDP_PORT AGENT_PORT
 
 #ifdef __cplusplus
 extern "C"
