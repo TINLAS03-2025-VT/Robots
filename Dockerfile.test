@@ -1,0 +1,13 @@
+FROM ros:humble
+
+# Install handy debugging tools
+RUN apt-get update && apt-get install -y bash-completion iputils-ping && rm -rf /var/lib/apt/lists/*
+
+# Automatically source ROS 2 and setup colcon completions for every bash session
+RUN echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+
+# Default directory when you log in
+WORKDIR /workspace
+
+# Keep the container alive by dropping into an interactive bash shell
+CMD ["/bin/bash"]

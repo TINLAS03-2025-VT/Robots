@@ -1,51 +1,45 @@
 cmake_minimum_required(VERSION 3.12)
+
+# 1. Global Setup Configuration
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(NOT DEFINED PICO_BOARD)
     set(PICO_BOARD pico2_w)
 endif()
-set(picotool_DIR "./picotool")
-find_package(picotool REQUIRED)
-include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
-project(pico_micro_ros_example C CXX ASM)
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+
+# Use local SDK downloaded by setup.cmake
+set(LOCAL_EXT_PATH "${CMAKE_CURRENT_LIST_DIR}/external")
+set(PICO_SDK_PATH "${LOCAL_EXT_PATH}/pico-sdk")
+set(LIBMICROROS_PATH "${LOCAL_EXT_PATH}/libmicroros/libmicroros")
+include(${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+
+set(picotool_DIR "${CMAKE_CURRENT_LIST_DIR}/external/picotool/build/install")
+
+project(pico_micro_ros_workspace C CXX ASM)
+
+# 2. Global Pico Core Init
 pico_sdk_init()
-link_directories(libmicroros)
-add_executable(pico_micro_ros_example
-    pico_micro_ros_example.c
-    picow_udp_transports.c
-	robot/movement.c
-)
-target_link_libraries(pico_micro_ros_example
-    pico_stdlib
-    microros
-    pico_cyw43_arch_lwip_threadsafe_background
-	hardware_pwm
-	m
-)
-target_include_directories(pico_micro_ros_example
-    PRIVATE
-	  ${CMAKE_CURRENT_LIST_DIR}
-	  ${CMAKE_CURRENT_LIST_DIR}/robot
-    PUBLIC
-      libmicroros/include
-)
 
-target_compile_definitions(pico_micro_ros_example PRIVATE
-    WIFI_SSID="${WIFI_SSID}"
-    WIFI_PASSWORD="${WIFI_PASSWORD}"
-    AGENT_IP="${AGENT_IP}"
-    AGENT_PORT=${AGENT_PORT}
-    MICRO_ROS_CLIENT_KEY=${MICRO_ROS_CLIENT_KEY}
-)
-
-SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
-SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
-# Configure Pico
-pico_enable_stdio_usb(pico_micro_ros_example 1)
-pico_enable_stdio_uart(pico_micro_ros_example 1)
+# 3. Global Compile Macro Overrides (applies to all targets automatically)
 add_compile_definitions(PICO_UART_ENABLE_CRLF_SUPPORT=0)
 add_compile_definitions(PICO_STDIO_ENABLE_CRLF_SUPPORT=0)
 add_compile_definitions(PICO_STDIO_DEFAULT_CRLF=0)
-# Generate UF2
-pico_add_extra_outputs(pico_micro_ros_example)
+
+# 4. Global Local Micro-ROS Directory Hook
+link_directories(${LIBMICROROS_PATH})
+
+include_directories(
+    ${LIBMICROROS_PATH}/include
+    ${CMAKE_CURRENT_LIST_DIR}
+)
+
+# 5. Load Targets
+add_subdirectory(src)
+
+# 6. Target to add compile_commands.json to root dir
+add_custom_target(copy_compile_commands ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_BINARY_DIR}/compile_commands.json"
+        "${CMAKE_SOURCE_DIR}/compile_commands.json"
+    COMMENT "Syncing compile_commands.json to root for clangd LSP support"
+)

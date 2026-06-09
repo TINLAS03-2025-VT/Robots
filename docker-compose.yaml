@@ -1,0 +1,24 @@
+services:
+  micro-ros-agent:
+    image: microros/micro-ros-agent:humble
+    container_name: microros_agent_udp
+    restart: unless-stopped
+    command: udp4 --port 8888 -v6
+    ports:
+      - "8888:8888/udp"
+    volumes:
+      - "/dev:/dev"
+    device_cgroup_rules:
+      - "c 166:* rmw"
+      - "c 188:* rmw"
+
+  ros2-test-env:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: ros2_interactive_tester
+    ipc: host
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/workspace

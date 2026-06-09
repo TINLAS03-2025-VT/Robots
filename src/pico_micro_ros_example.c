@@ -24,25 +24,8 @@
 // Handy logging functions etc. Copied from pico_drive_test.
 #include "libdiy/log/log.h"
 
-#ifndef WIFI_SSID
-#define WIFI_SSID "YOUR_WIFI_SSID"
-#endif
-
-#ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
-#endif
-
-#ifndef AGENT_IP
-#define AGENT_IP "YOUR_AGENT_IP"
-#endif
-
-#ifndef AGENT_PORT
-#define AGENT_PORT 8888
-#endif
-
-#ifndef MICRO_ROS_CLIENT_KEY
-#define MICRO_ROS_CLIENT_KEY 0xC0FFEE01
-#endif
+// User configuration (Wi-Fi, Agent IP, Client Key)
+#include "secrets.h"
 
 #ifndef FRAME_ID_CAPACITY
 #define FRAME_ID_CAPACITY 64
@@ -246,7 +229,7 @@ void ros_init()
     }
 
     // Initialize Subscription
-    char *pos_sub_str = "/cam/pos";
+    char *pos_sub_str = "/robots/pos";
     PRINT_DEBUG("Subscribing to: %s ", pos_sub_str);
     if (rclc_subscription_init_best_effort(
             &posearray_subscriber,
