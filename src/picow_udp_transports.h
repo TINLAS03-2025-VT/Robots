@@ -3,19 +3,12 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include "secrets.h"
 
 #include <uxr/client/profile/transport/custom/custom_transport.h>
 #include "pico/cyw43_arch.h"
 #include "lwip/pbuf.h"
 #include "lwip/udp.h"
-
-#ifndef AGENT_IP
-#define AGENT_IP "YOUR_AGENT_IP"
-#endif
-
-#ifndef AGENT_PORT
-#define AGENT_PORT 8888
-#endif
 
 #define ROS_AGENT_IP_ADDR AGENT_IP
 #define ROS_AGENT_UDP_PORT AGENT_PORT

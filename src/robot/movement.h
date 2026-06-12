@@ -5,8 +5,8 @@
 #include "hardware/pwm.h"
 
 // --- Hardware Pins ---
-#define PWM_LM 6 // Left motor
-#define PWM_RM 7 // Right motor
+#define PWM_LM 7 // Left motor
+#define PWM_RM 6 // Right motor
 #define EN_L 11  // Left IR encoder
 #define EN_R 14  // Right IR encoder
 
@@ -23,7 +23,8 @@ void stop(void);
 void move_ms(float RPS_L, float RPS_R, uint32_t ms_sleep);
 void turn(int deg);
 void move_to(geometry_msgs__msg__Pose *own_pos,
-             geometry_msgs__msg__Pose *target_pos);
+             geometry_msgs__msg__Pose *target_pos, const double move_speed_rps,
+             const double turn_speed_rps);
 void set_pose(geometry_msgs__msg__Pose *pose, double x, double y,
               double yaw_deg);
 

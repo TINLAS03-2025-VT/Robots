@@ -164,7 +164,6 @@ void calculate_PWM(float RPS_L, float RPS_R, int *pwm_L, int *pwm_R) {
   }
 }
 
-
 // Stop moving
 void stop() {
   pwm_set_gpio_level(PWM_LM, 5000);
@@ -174,7 +173,7 @@ void stop() {
 // Move for a certain amount of ms
 void move_ms(float RPS_L, float RPS_R, uint32_t ms_sleep) {
   int pwm_L, pwm_R;
-  calculate_PWM(-RPS_L, -RPS_R, &pwm_L, &pwm_R);
+  calculate_PWM(RPS_L, RPS_R, &pwm_L, &pwm_R);
   pwm_L = (RPS_L == 0.0f) ? 5000 : pwm_L;
   pwm_R = (RPS_R == 0.0f) ? 5000 : pwm_R;
 
@@ -209,7 +208,7 @@ void turn_ms(int deg, float RPS, uint32_t ms_sleep) {
 // Non-blocking move
 void move_continuous(float RPS_L, float RPS_R) {
   int pwm_L, pwm_R;
-  calculate_PWM(-RPS_L, -RPS_R, &pwm_L, &pwm_R);
+  calculate_PWM(RPS_L, RPS_R, &pwm_L, &pwm_R);
   pwm_L = (RPS_L == 0.0f) ? 5000 : pwm_L;
   pwm_R = (RPS_R == 0.0f) ? 5000 : pwm_R;
 
@@ -218,7 +217,7 @@ void move_continuous(float RPS_L, float RPS_R) {
 }
 
 // Non-blocking turn
-void turn_continuoous(int deg, float RPS) {
+void turn_continuous(int deg, float RPS) {
   if (!deg)
     return;
 
@@ -275,9 +274,12 @@ double calculate_distance(geometry_msgs__msg__Pose *own_pos,
 // Calculate distance and angle from robot's Pose to target's Pose, turn or move
 // forward based on DEADZONE
 void move_to(geometry_msgs__msg__Pose *own_pos,
-             geometry_msgs__msg__Pose *target_pos) {
+             geometry_msgs__msg__Pose *target_pos,
+             const double move_speed_rps,
+            const double turn_speed_rps) {
   static uint32_t last_debug_ms = 0;
-  static int last_action = -1; // 0 = stop, 1 = turn left, 2 = turn right, 3 = move forward
+  static int last_action =
+      -1; // 0 = stop, 1 = turn left, 2 = turn right, 3 = move forward
 
   uint32_t now_ms = to_ms_since_boot(get_absolute_time());
 
@@ -288,8 +290,9 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
 
     int action = 0;
     if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
-      printf("[MOVE] stop: target reached, distance=%.3f <= MIN_DISTANCE=%.3f\n",
-             distance, (double)MIN_DISTANCE);
+      printf(
+          "[MOVE] stop: target reached, distance=%.3f <= MIN_DISTANCE=%.3f\n",
+          distance, (double)MIN_DISTANCE);
       last_debug_ms = now_ms;
       last_action = action;
     }
@@ -311,32 +314,25 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
 
   // Check if the relative error is greater than the allowed deadzone
   if (fabs(delta_angle) > DEADZONE) {
+    // POSITIVE delta means target is CW (Right). NEGATIVE means CCW (Left).
+    // action: 1 = turn left, 2 = turn right
     int action = (delta_angle > 0.0) ? 2 : 1;
-
-    if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
-      if (delta_angle > 0.0) {
-        printf("[MOVE] turn right: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n",
-               distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
-      } else {
-        printf("[MOVE] turn left: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n",
-               distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
-      }
-
-      last_debug_ms = now_ms;
-      last_action = action;
-    }
-
-    turn_continuoous(delta_angle, 1);
-  } else {
-    int action = 3;
-
-    if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
-      printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f within DEADZONE=%.2f\n",
+    if (action == 2) { // delta_angle < 0.0
+      printf("[MOVE] turn right: distance=%.3f yaw=%.2f target_angle=%.2f "
+             "delta=%.2f DEADZONE=%.2f\n",
              distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
-      last_debug_ms = now_ms;
-      last_action = action;
+    } else { // delta_angle > 0.0
+      printf("[MOVE] turn left: distance=%.3f yaw=%.2f target_angle=%.2f "
+             "delta=%.2f DEADZONE=%.2f\n",
+             distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
     }
 
-    move_continuous(1, 1);
+    turn_continuous(delta_angle, turn_speed_rps);
+  } else {
+    printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f "
+           "delta=%.2f within DEADZONE=%.2f\n",
+           distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
+
+    move_continuous(move_speed_rps, move_speed_rps);
   }
 }

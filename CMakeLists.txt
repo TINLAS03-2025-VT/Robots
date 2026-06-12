@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT DEFINED PICO_BOARD)
-    set(PICO_BOARD pico2_w)
+    set(PICO_BOARD pico_w)
 endif()
 
 # Use local SDK downloaded by setup.cmake
