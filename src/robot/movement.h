@@ -16,16 +16,16 @@ void init_servo_pwm(uint gpio);
 void calculate_PWM(float RPS_L, float RPS_R, int *pwm_L, int *pwm_R);
 void set_motor_speed(float RPS_L, float RPS_R, uint32_t ms_sleep);
 float measure_motor_speed(int pwm_val, char motor, int steps);
-double map(double x, double in_min, double in_max, double out_min,
-           double out_max);
+float map(float x, float in_min, float in_max, float out_min,
+           float out_max);
 void move(float RPS_L, float RPS_R);
 void stop(void);
 void move_ms(float RPS_L, float RPS_R, uint32_t ms_sleep);
 void turn(int deg);
 void move_to(geometry_msgs__msg__Pose *own_pos,
-             geometry_msgs__msg__Pose *target_pos, const double move_speed_rps,
-             const double turn_speed_rps);
-void set_pose(geometry_msgs__msg__Pose *pose, double x, double y,
-              double yaw_deg);
+             geometry_msgs__msg__Pose *target_pos, const float move_speed_rps,
+             const float turn_speed_rps);
+void set_pose(geometry_msgs__msg__Pose *pose, float x, float y,
+              float yaw_deg);
 
 #endif

@@ -9,6 +9,7 @@ add_executable(${TARGET_NAME}
     pico_micro_ros_example.c
     picow_udp_transports.c
     robot/movement.c
+    robot/rff-algorithm.c
 )
 
 target_link_libraries(${TARGET_NAME}

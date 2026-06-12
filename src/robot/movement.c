@@ -221,19 +221,19 @@ void turn_continuous(int deg, float RPS) {
 
 // Function to convert quaternion's orientation to yaw
 // https://robotics.stackexchange.com/questions/16471/get-yaw-from-quaternion
-double quaternion_to_yaw(geometry_msgs__msg__Quaternion *q) { return atan2(2.0f * (q->w * q->z + q->x * q->y), q->w * q->w + q->x * q->x - q->y * q->y - q->z * q->z); }
+float quaternion_to_yaw(geometry_msgs__msg__Quaternion *q) { return atan2(2.0f * (q->w * q->z + q->x * q->y), q->w * q->w + q->x * q->x - q->y * q->y - q->z * q->z); }
 
-double rad_to_deg(double rad) { return rad * 180.0 / PI; }
-double deg_to_rad(double deg) { return deg * (M_PI / 180.0); }
+float rad_to_deg(float rad) { return rad * 180.0 / PI; }
+float deg_to_rad(float deg) { return deg * (M_PI / 180.0); }
 
 // Function to easily set a Pose and primarily its Yaw
-void set_pose(geometry_msgs__msg__Pose *pose, double x, double y, double yaw_deg) {
+void set_pose(geometry_msgs__msg__Pose *pose, float x, float y, float yaw_deg) {
 	pose->position.x = x;
 	pose->position.y = y;
 	pose->position.z = 0;
 
 	// Convert yaw degrees to a Z-axis Quaternion
-	double yaw_rad = deg_to_rad(yaw_deg);
+	float yaw_rad = deg_to_rad(yaw_deg);
 	pose->orientation.x = 0.0;
 	pose->orientation.y = 0.0;
 	pose->orientation.z = sin(yaw_rad / 2.0);
@@ -241,9 +241,9 @@ void set_pose(geometry_msgs__msg__Pose *pose, double x, double y, double yaw_deg
 }
 
 // Calculate distance between 2 Poses, from own_pos to target_pos
-double calculate_distance(geometry_msgs__msg__Pose *own_pos, geometry_msgs__msg__Pose *target_pos) {
-	double delta_x = target_pos->position.x - own_pos->position.x;
-	double delta_y = target_pos->position.y - own_pos->position.y;
+float calculate_distance(geometry_msgs__msg__Pose *own_pos, geometry_msgs__msg__Pose *target_pos) {
+	float delta_x = target_pos->position.x - own_pos->position.x;
+	float delta_y = target_pos->position.y - own_pos->position.y;
 	return sqrt(pow(delta_x, 2) + pow(delta_y, 2));
 	// Pythagoras wowzers
 }
@@ -253,22 +253,22 @@ double calculate_distance(geometry_msgs__msg__Pose *own_pos, geometry_msgs__msg_
 void move_to(
 	geometry_msgs__msg__Pose *own_pos,
 	geometry_msgs__msg__Pose *target_pos,
-	const double move_speed_rps,
-	const double turn_speed_rps
+	const float move_speed_rps,
+	const float turn_speed_rps
 ) {
 	static uint32_t last_debug_ms = 0;
 	static int last_action = -1; // 0 = stop, 1 = turn left, 2 = turn right, 3 = move forward
 
 	uint32_t now_ms = to_ms_since_boot(get_absolute_time());
 
-	double distance = calculate_distance(own_pos, target_pos);
+	float distance = calculate_distance(own_pos, target_pos);
 
 	if (distance <= MIN_DISTANCE) {
 		stop();
 
 		int action = 0;
 		if (action != last_action || (now_ms - last_debug_ms) >= 1000) {
-			printf("[MOVE] stop: target reached, distance=%.3f <= MIN_DISTANCE=%.3f\n", distance, (double)MIN_DISTANCE);
+			printf("[MOVE] stop: target reached, distance=%.3f <= MIN_DISTANCE=%.3f\n", distance, (float)MIN_DISTANCE);
 			last_debug_ms = now_ms;
 			last_action = action;
 		}
@@ -276,9 +276,9 @@ void move_to(
 		return;
 	}
 
-	double yaw = rad_to_deg(quaternion_to_yaw(&own_pos->orientation));
-	double angle_to_target = rad_to_deg(atan2(target_pos->position.y - own_pos->position.y, target_pos->position.x - own_pos->position.x));
-	double delta_angle = angle_to_target - yaw;
+	float yaw = rad_to_deg(quaternion_to_yaw(&own_pos->orientation));
+	float angle_to_target = rad_to_deg(atan2(target_pos->position.y - own_pos->position.y, target_pos->position.x - own_pos->position.x));
+	float delta_angle = angle_to_target - yaw;
 
 	// Normalize delta_angle to be between -180 and 180 degrees
 	while (delta_angle > 180.0) delta_angle -= 360.0;
@@ -289,13 +289,13 @@ void move_to(
 		// POSITIVE delta means target is CW (Right). NEGATIVE means CCW (Left).
 		// action: 1 = turn left, 2 = turn right
 		int action = (delta_angle > 0.0) ? 2 : 1;
-		if (action == 2) printf("[MOVE] turn right: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (double)DEADZONE); // delta_angle < 0.0
-		else printf("[MOVE] turn left: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (double)DEADZONE); // delta_angle > 0.0
+		if (action == 2) printf("[MOVE] turn right: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (float)DEADZONE); // delta_angle < 0.0
+		else printf("[MOVE] turn left: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (float)DEADZONE); // delta_angle > 0.0
 
 		turn_continuous(delta_angle, turn_speed_rps);
 	}
 	else {
-		printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f within DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (double)DEADZONE);
+		printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f delta=%.2f within DEADZONE=%.2f\n", distance, yaw, angle_to_target, delta_angle, (float)DEADZONE);
 
 		move_continuous(move_speed_rps, move_speed_rps);
 	}
