@@ -9,17 +9,15 @@
 #include <picow_udp_transports.h>
 
 // ─── POSIX shims required by micro-ROS on bare-metal ──────────────────────────
-void usleep(uint64_t us)
-{
-    sleep_us(us);
+void usleep(uint64_t us) {
+	sleep_us(us);
 }
 
-int clock_gettime(clockid_t unused, struct timespec *tp)
-{
-    uint64_t m = time_us_64();
-    tp->tv_sec = m / 1000000;
-    tp->tv_nsec = (m % 1000000) * 1000;
-    return 0;
+int clock_gettime(clockid_t unused, struct timespec *tp) {
+	uint64_t m = time_us_64();
+	tp->tv_sec = m / 1000000;
+	tp->tv_nsec = (m % 1000000) * 1000;
+	return 0;
 }
 
 // ─── RX ring buffer ───────────────────────────────────────────────────────────
@@ -38,8 +36,7 @@ static uint16_t trans_recv_len_ring[TRANS_RECV_RING_SIZE];
 static volatile uint8_t trans_recv_head = 0;  // written by callback, read by reader
 static volatile uint8_t trans_recv_tail = 0;  // written by reader, read by callback
 
-static void callback_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p,
-                          const ip_addr_t *addr, u16_t port)
+static void callback_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
 {
     ST_PICOW_TRANSPORT_PARAMS* params = (ST_PICOW_TRANSPORT_PARAMS*) arg;
 

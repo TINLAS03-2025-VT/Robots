@@ -12,11 +12,13 @@ add_executable(${TARGET_NAME}
 )
 
 target_link_libraries(${TARGET_NAME}
-    pico_stdlib
-    microros
-    pico_cyw43_arch_lwip_threadsafe_background
     hardware_pwm
     m
+    microros
+    pico_cyw43_arch_lwip_threadsafe_background
+    pico_float
+    pico_stdio
+    pico_stdlib
 )
 
 target_include_directories(${TARGET_NAME}
@@ -25,12 +27,12 @@ target_include_directories(${TARGET_NAME}
     ${CMAKE_CURRENT_LIST_DIR}/robot
 )
 
-SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -ffunction-sections -fdata-sections")
-SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ffunction-sections -fdata-sections")
+SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections")
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections")
 
 # Configure Pico
 pico_enable_stdio_usb(${TARGET_NAME} 1)
-pico_enable_stdio_uart(${TARGET_NAME} 1)
+pico_enable_stdio_uart(${TARGET_NAME} 0)
 
 # Generate UF2
 pico_add_extra_outputs(${TARGET_NAME})

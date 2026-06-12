@@ -1,8 +1,8 @@
 #ifndef __MOVEMENT__
-#define __MOOVEMENT__
+#define __MOVEMENT__
 
 #include "geometry_msgs/msg/pose.h"
-#include "hardware/pwm.h"
+#include <pico/stdlib.h>
 
 // --- Hardware Pins ---
 #define PWM_LM 7 // Left motor
