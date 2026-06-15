@@ -14,20 +14,24 @@
 #define PRINT_DEBUG(format, ...)                                               \
   printf("%s[DEBUG] " format "%s\n", KYEL, ##__VA_ARGS__, KNRM)
 
-// SOFTCHECK: Logs the critical error, turns off the LED, but lets the program
-// continue
+// SOFTCHECK: Logs the critical error, turns off the LED, but lets the program continue
 #define SOFTCHECK(format, ...)                                                 \
-  printf("%s[CRITICAL ERROR] " format "%s\n", KRED, ##__VA_ARGS__, KNRM);      \
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  do {                                                                         \
+    printf("%s[CRITICAL ERROR] " format "%s\n", KRED, ##__VA_ARGS__, KNRM);    \
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                             \
+  } while (0)
 
-// HARDCHECK: Logs the critical error, turns off the LED, waits 2 seconds, and
-// reboots via watchdog
+// HARDCHECK: Logs the critical error, flushes serial, cleanly stops Wi-Fi, and reboots via watchdog
 #define HARDCHECK(format, ...)                                                 \
-  printf("%s[CRITICAL ERROR] " format                                          \
-         ". Resetting system in 2 seconds...%s\n",                             \
-         KRED, ##__VA_ARGS__, KNRM);                                           \
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                               \
-  sleep_ms(2000);                                                              \
-  watchdog_reboot(0, 0, 0);
+  do {                                                                         \
+    printf("%s[CRITICAL ERROR] " format                                        \
+           ". Resetting system in 2 seconds...%s\n",                           \
+           KRED, ##__VA_ARGS__, KNRM);                                         \
+    fflush(stdout);                                                            \
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                             \
+    cyw43_arch_deinit();                                                       \
+    sleep_ms(2000);                                                            \
+    watchdog_reboot(0, 0, 0);                                                  \
+  } while (0)
 
 #endif

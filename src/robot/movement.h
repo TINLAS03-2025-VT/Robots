@@ -22,9 +22,10 @@ void move(float RPS_L, float RPS_R);
 void stop(void);
 void move_ms(float RPS_L, float RPS_R, uint32_t ms_sleep);
 void turn(int deg);
-void move_to(geometry_msgs__msg__Pose *own_pos,
-             geometry_msgs__msg__Pose *target_pos, const float move_speed_rps,
-             const float turn_speed_rps);
+void move_to(
+	geometry_msgs__msg__Pose *own_pos,
+	geometry_msgs__msg__Pose *target_pos
+);
 void set_pose(geometry_msgs__msg__Pose *pose, float x, float y,
               float yaw_deg);
 
