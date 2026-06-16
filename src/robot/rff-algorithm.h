@@ -7,6 +7,7 @@
 void calculate_optimal_move(geometry_msgs__msg__Point *optimal_move,
                             geometry_msgs__msg__Point *start_pos,
                             geometry_msgs__msg__PoseArray *all_robot_positions,
-                            geometry_msgs__msg__Point end_goal);
+                            geometry_msgs__msg__Point end_goal,
+							geometry_msgs__msg__Point excluded_point);
 
 #endif

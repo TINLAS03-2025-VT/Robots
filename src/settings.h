@@ -3,16 +3,21 @@
 
 #include <stdint.h>
 
-#define TAG_NUM 5
+#define TAG_NUM 3
 #define MAX_ROBOTS_IN_GAME 5
 
-// Pathfinding algorithm settings
-#define K_ATT 2.0 		// Attraction weight
-#define K_REP 2.0 		// Repulsion weight
+/* 	Pathfinding algorithm settings
+*	These settings were tweaked to work well on a field of 1x1 meters, having 
+*/
+#define K_GOAL_ATT 2.0 		// Attraction weight of goal
+#define K_GOAL_REP K_REP * MAX_ROBOTS_IN_GAME + 1.0f	// Goal repulsion, always higher than total hunter repulsion
+#define K_REP 2.2 		// Repulsion weight
 #define K_WALL K_REP * MAX_ROBOTS_IN_GAME + 1.0f		// Wall repulsion, always higher than total hunter repulsion
-#define K_RAND 0.3 		// Randomness weight (chance)
+#define K_RAND 0.7 		// Randomness weight (chance)
+#define RAND_FORCE_CHANGE_INTERVAL_MS 4000
 
-#define MIN_DISTANCE_TO_GOAL 1.0	// Distance at which goal stops pulling and pushes away.
+#define MIN_DISTANCE_TO_ROBOT 1.5
+#define MIN_DISTANCE_TO_GOAL 1.5	// Distance at which goal stops pulling and pushes away.
 #define WALL_SAFETY_MARGIN 0.4f  // Distance from wall where repulsion kicks in
 
 //#define MIN_DISTANCE_TO_ROBOT 0.2	// Min distance needed to push away from robot

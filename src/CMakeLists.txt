@@ -3,10 +3,10 @@ cmake_minimum_required(VERSION 3.12)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
-set(TARGET_NAME pico_micro_ros_example)
+set(TARGET_NAME main)
 
 add_executable(${TARGET_NAME}
-    pico_micro_ros_example.c
+	main.c
     picow_udp_transports.c
     robot/movement.c
     robot/rff-algorithm.c
