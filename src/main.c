@@ -273,7 +273,7 @@ void process_movement_logic(void) {
         geometry_msgs__msg__Pose__init(&next_step);
 
         calculate_optimal_move(&next_step.position, &own_robot_pose.position,
-                               &all_robot_positions, target.position, target.position);
+                               &all_robot_positions, &target.position, &target.position);
 
         move_to(&own_robot_pose, &next_step);
         
