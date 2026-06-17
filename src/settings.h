@@ -12,7 +12,7 @@
 #define K_GOAL 0.5f 									// Attraction/repulsion weight of goal
 #define K_HUNTER 1.0f 									// Hunter repulsion weight
 #define K_WALL K_HUNTER * MAX_ROBOTS_IN_GAME + 1.0f		// Wall repulsion weight, always higher than total hunter repulsion
-#define K_RAND 0.7 										// Randomness weight (chance)
+#define K_RAND 0.7f 										// Randomness weight (chance)
 
 #define TARGET_SAFETY_MARGIN 1.8f	// Distance at which goal stops pulling and pushes away.
 #define WALL_SAFETY_MARGIN 0.4f  // Distance from wall where repulsion kicks in
@@ -23,13 +23,13 @@
 #define FIELD_MAX_Y 10.0f
 
 // Movement settings
-#define DEADZONE 10.0    		// Deadzone degrees, minimal difference to turn
-#define MOVE_SPEED_RPS 0.4		// Moving speed forward	
-#define MAX_TURNING_RPS 0.6		// Max turn speed
-#define MIN_TURNING_RPS 0.05
+#define DEADZONE 10.0f    		// Deadzone degrees, minimal difference to turn
+#define MOVE_SPEED_RPS 0.4f		// Moving speed forward
+#define MAX_TURNING_RPS 0.6f		// Max turn speed
+#define MIN_TURNING_RPS 0.05f
 
 // No effect, because it's continuous
-#define MIN_MOVE_DISTANCE 0.3  	// Distance at which to stop moving straight to a point
+#define MIN_MOVE_DISTANCE 0.3f  	// Distance at which to stop moving straight to a point
 #define MAX_MOVE_DISTANCE_BACKWARD MIN_MOVE_DISTANCE + 1	// Maximum distance from which it won't simply drive backwards
 
 // ROS Topic identifiers
