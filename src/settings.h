@@ -9,13 +9,16 @@
 /* 	Pathfinding algorithm settings
 *	These settings were tweaked to work well on a field of 1x1 meters, having 
 */
-#define K_GOAL 0.5f 									// Attraction/repulsion weight of goal
-#define K_HUNTER 1.0f 									// Hunter repulsion weight
-#define K_WALL K_HUNTER * MAX_ROBOTS_IN_GAME + 1.0f		// Wall repulsion weight, always higher than total hunter repulsion
-#define K_RAND 0.7f 										// Randomness weight (chance)
+#define K_GOAL 1.2f 					// Attraction/repulsion weight of goal
+#define GOAL_TARGETED_DISTANCE 2.0f		// Ideal radius around the runner
 
-#define TARGET_SAFETY_MARGIN 1.8f	// Distance at which goal stops pulling and pushes away.
-#define WALL_SAFETY_MARGIN 0.4f  // Distance from wall where repulsion kicks in
+#define K_HUNTER 1.5f 					// Hunter repulsion weight
+#define HUNTER_SPACING 2.8f				// Ideal distance between brother hunters
+
+#define K_WALL 2.5f						// Wall repulsion, always higher than total hunter repulsion
+#define WALL_SAFETY_MARGIN 1.2f			// Distance from wall where repulsion kicks in
+
+#define K_RAND 0.7f 					// Randomness weight (chance)
 
 #define FIELD_MIN_X 0.0f
 #define FIELD_MAX_X 10.0f

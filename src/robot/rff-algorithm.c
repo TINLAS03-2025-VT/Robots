@@ -36,7 +36,8 @@ static void apply_goal_force(Vector3* total_force, const Vector3* current_pos, c
 
 	Vector3 unit_goal_2d_vector = { goal_vector.x / distance_to_goal, goal_vector.y / distance_to_goal, 0.0f };
 
-	float force = (distance_to_goal < TARGET_SAFETY_MARGIN) ? -(1.0f / distance_to_goal) * K_GOAL : distance_to_goal * K_GOAL;
+	float displacement = distance_to_goal - GOAL_TARGETED_DISTANCE;
+	float force = displacement * K_GOAL;
 
 	total_force->x += unit_goal_2d_vector.x * force;
 	total_force->y += unit_goal_2d_vector.y * force;
@@ -45,26 +46,24 @@ static void apply_goal_force(Vector3* total_force, const Vector3* current_pos, c
 static void apply_hunter_force(Vector3* total_force, const Vector3* start_pos, const Vector3Array* obstacle_poses, const Vector3* excluded_point) {
 	if (total_force == NULL || start_pos == NULL || obstacle_poses == NULL || excluded_point == NULL) return;
 
-	Vector3 total_hunter_force = {0};
 	for (size_t i = 0; i < obstacle_poses->poses.size; i++) {
 		Vector3 hunter_pos = obstacle_poses->poses.data[i].position;
 
 		// Skip self profile and specified target exclusion pins
-		if (hunter_pos.z == TAG_NUM || hunter_pos.z == excluded_point->z) continue;
+		if (lround(hunter_pos.z) == TAG_NUM || lround(hunter_pos.z) == lround(excluded_point->z)) continue;
 
 		Vector3 hunter_vector = get_direction_vector(&hunter_pos, start_pos);
-
 		float distance_to_hunter = get_vector_length(&hunter_vector);
 		distance_to_hunter = fmaxf(distance_to_hunter, DISTANCE_INVERSION_SAFEGUARD);
 
-		Vector3 unit_hunter_2d_vector = {hunter_vector.x / distance_to_hunter, hunter_vector.y / distance_to_hunter, hunter_vector.z};
+		if (distance_to_hunter < HUNTER_SPACING) {
+			Vector3 unit_hunter_2d_vector = {hunter_vector.x / distance_to_hunter, hunter_vector.y / distance_to_hunter, hunter_vector.z};
 
-		float force = (1.0f / distance_to_hunter);
-		total_hunter_force.x += unit_hunter_2d_vector.x * force;
-		total_hunter_force.y += unit_hunter_2d_vector.y * force;
+			float force = ((1.0f / (distance_to_hunter * distance_to_hunter)) - (1.0f / (HUNTER_SPACING * HUNTER_SPACING))) * K_HUNTER;
+			total_force->x += unit_hunter_2d_vector.x * force;
+			total_force->y += unit_hunter_2d_vector.y * force;
+		}
 	}
-	total_force->x += total_hunter_force.x * K_HUNTER;
-	total_force->y += total_hunter_force.y * K_HUNTER;
 }
 
 static float get_wall_force(float distance) {
