@@ -37,8 +37,12 @@
 
 // ROS Topic identifiers
 #define POS_TOPIC "/robots/pos"
+#define ROS_READY_TOPIC "/game/robots/ready"
+#define ROS_COMMAND_TOPIC "/game/command"
+#define ROS_SEEN_TOPIC "/robots/seen"
+
 #define MAX_MILLIS_WITHOUT_NEW_POSITION 500		// Not receiving their own tag's position
 #define MAX_MILLIS_WITHOUT_ANY_POSITION	5000		// Receiving nothing on the position callback at all
-
+#define COMMAND_BUFFER_CAPACITY 32
 
 #endif

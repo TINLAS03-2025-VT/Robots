@@ -15,7 +15,9 @@
 #include <geometry_msgs/msg/point.h>
 #include <geometry_msgs/msg/pose.h>
 #include <geometry_msgs/msg/pose_array.h>
-#include <std_msgs/msg/u_int64.h>
+#include <std_msgs/msg/bool.h>
+#include <std_msgs/msg/int32.h>
+#include <std_msgs/msg/string.h>
 
 // Core micro-ROS libs
 #include <rcl/error_handling.h>
@@ -28,12 +30,18 @@
 // Project drivers and settings
 #include "movement.h"
 #include "picow_udp_transports.h"
+#include "rcl/publisher.h"
+#include "rclc/executor_handle.h"
+#include "rclc/subscription.h"
 #include "rff-algorithm.h"
 #include "secrets.h"
 #include "settings.h"
 
 // Handy logging functions etc.
 #include "libdiy/log/log.h"
+#include "std_msgs/msg/bool.h"
+#include "std_msgs/msg/int32.h"
+#include "std_msgs/msg/string.h"
 
 #ifndef FRAME_ID_CAPACITY
 #define FRAME_ID_CAPACITY 64
@@ -42,7 +50,8 @@
 #define NODE_BASE_NAME_LENGTH 5
 #define NODE_ROBOT_NUMBER_LENGTH 3
 #define NODE_NAME_NULL_CHAR 1
-#define NODE_NAME_LENGTH (NODE_BASE_NAME_LENGTH + NODE_ROBOT_NUMBER_LENGTH + NODE_NAME_NULL_CHAR)
+#define NODE_NAME_LENGTH                                                       \
+  (NODE_BASE_NAME_LENGTH + NODE_ROBOT_NUMBER_LENGTH + NODE_NAME_NULL_CHAR)
 
 // --- Configuration & Credentials ---
 static const char ssid[] = WIFI_SSID;
@@ -55,10 +64,15 @@ static rcl_allocator_t allocator;
 static rclc_support_t support;
 static rclc_executor_t executor;
 static rcl_subscription_t posearray_subscriber;
+static rcl_subscription_t command_subscriber;
+static rcl_subscription_t seen_subscriber;
+static rcl_publisher_t ready_publisher;
+std_msgs__msg__String command_msg;
+char command_string_buffer[COMMAND_BUFFER_CAPACITY];
 
 // --- Shared Global Application State ---
 static geometry_msgs__msg__PoseArray all_robot_positions;
-static geometry_msgs__msg__Pose target;    
+static geometry_msgs__msg__Pose target;
 static int runner_tag = 4; // Default runner target assignment
 static char frame_id_buffer[FRAME_ID_CAPACITY];
 
@@ -73,25 +87,27 @@ int wifi_connected(void);
 int wifi_reconnect(void);
 void ping_agent(void);
 void ros_init(void);
-int get_tag_pos(geometry_msgs__msg__Pose *robot_pose_buffer, const geometry_msgs__msg__PoseArray *positions, int tag);
+int get_tag_pos(geometry_msgs__msg__Pose *robot_pose_buffer,
+                const geometry_msgs__msg__PoseArray *positions, int tag);
 void posearray_callback(const void *msgin);
 void check_connections_and_spin(void);
 void process_movement_logic(void);
 
 // --- Lookup Functions ---
-int get_tag_pos(geometry_msgs__msg__Pose *robot_pose_buffer, const geometry_msgs__msg__PoseArray *positions, int tag) {
-    for (size_t i = 0; i < positions->poses.size; i++) {
-        if (positions->poses.data[i].position.z == tag) {
-            *robot_pose_buffer = positions->poses.data[i];
-            return 0; // Success
-        }
+int get_tag_pose(geometry_msgs__msg__Pose *robot_pose_buffer,
+                 const geometry_msgs__msg__PoseArray *positions, int tag) {
+  for (size_t i = 0; i < positions->poses.size; i++) {
+    if (positions->poses.data[i].position.z == tag) {
+      *robot_pose_buffer = positions->poses.data[i];
+      return 0; // Success
     }
-    return 1; // Tag not found
+  }
+  return 1; // Tag not found
 }
 
 void ping_agent() {
   // Test Micro-ROS agent connection
-  printf("Pinging MicroROS Agent... \n");
+  PRINT_DEBUG("Pinging MicroROS Agent...");
 
   bool agent_connected = false;
   int agent_retry_count = 0;
@@ -103,8 +119,8 @@ void ping_agent() {
       PRINT_SUCCESS("Agent succesfully pinged!");
     } else {
       agent_retry_count++;
-      printf("[RETRY] Agent not found. Retrying (%d/10)...\n",
-             agent_retry_count);
+      PRINT_DEBUG("Agent not found. Retrying (%d/10)...",
+                 agent_retry_count);
       sleep_ms(1000);
 
       if (agent_retry_count >= 10)
@@ -115,198 +131,318 @@ void ping_agent() {
 
 // --- micro-ROS Callbacks ---
 void posearray_callback(const void *msgin) {
-    (void)msgin;
-    last_pos_callback = uxr_millis();
-    posearray_rx_count++;
+  (void)msgin;
+  last_pos_callback = uxr_millis();
+  posearray_rx_count++;
 
-    printf("\n[INFO] Received positions message #%lu\n", (unsigned long)posearray_rx_count);
+  PRINT_DEBUG("Received positions message #%lu",
+         (unsigned long)posearray_rx_count);
 
-    geometry_msgs__msg__Pose own_robot_pose;
-    if (get_tag_pos(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
-        last_own_pos_callback = uxr_millis();
+  geometry_msgs__msg__Pose own_robot_pose;
+  if (get_tag_pose(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
+    last_own_pos_callback = uxr_millis();
+  }
+}
+
+void command_callback(const void *msgin) {
+  const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;
+
+  if (msg != NULL && msg->data.data != NULL) {
+    PRINT_DEBUG("Command received! Message content: %s", msg->data.data);
+  } else {
+    PRINT_DEBUG("Command received, but data buffer is empty.");
+  }
+}
+
+void seen_callback(const void *msgin) {
+  // Placeholder for future "seen" subscription callback
+  //PRINT_DEBUG("Seen message received!\n Message content: %s\n", (char *)msgin);
+
+  const std_msgs__msg__Bool *seen_msg = (const std_msgs__msg__Bool *)msgin;
+  if (seen_msg->data) {
+    PRINT_DEBUG("Robot sees runner.");
+    if (get_tag_pose(&target, &all_robot_positions, runner_tag) == 0) {
+      PRINT_DEBUG(
+          "Target position updated. Target coordinates: x=%.2f, y=%.2f, z=%.2f",
+          target.position.x, target.position.y, target.position.z);
+    } else {
+      PRINT_DEBUG(
+          "Runner TAG [%d] missing from updates; skipped computation cycle.",
+          runner_tag);
     }
+  } else {
+    PRINT_DEBUG("Robot has NOT seen the runner.");
+  }
+}
+
+// Initializes the subscription to the topic and sets up the
+// callback, adds it to executor
+void ros_create_pos_sub(rclc_executor_t *executor) {
+  PRINT_DEBUG("Subscribing to: %s", POS_TOPIC);
+  geometry_msgs__msg__PoseArray__init(&all_robot_positions);
+  if (!geometry_msgs__msg__Pose__Sequence__init(&all_robot_positions.poses,
+                                                MAX_ROBOTS_IN_GAME)) {
+    HARDCHECK("Failed to allocate memory for robot positions sequence");
+  }
+
+  all_robot_positions.header.frame_id.data = frame_id_buffer;
+  all_robot_positions.header.frame_id.size = 0;
+  all_robot_positions.header.frame_id.capacity = FRAME_ID_CAPACITY;
+  all_robot_positions.header.frame_id.data[0] = '\0';
+
+  if (rclc_subscription_init_best_effort(
+          &posearray_subscriber, &node,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray),
+          POS_TOPIC) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize subscription");
+  }
+
+  if (rclc_executor_add_subscription(executor, &posearray_subscriber,
+                                     &all_robot_positions, &posearray_callback,
+                                     ON_NEW_DATA) != RCL_RET_OK) {
+    HARDCHECK("Failed to add subscription to executor");
+  }
+}
+
+void ros_create_command_sub(rclc_executor_t *executor) {
+  PRINT_DEBUG("Subscribing to: %s", ROS_COMMAND_TOPIC);
+
+  std_msgs__msg__String__init(&command_msg);
+  
+  command_msg.data.data = command_string_buffer;
+  command_msg.data.capacity = COMMAND_BUFFER_CAPACITY;
+  command_msg.data.size = 0;
+
+  if (rclc_subscription_init_default(
+          &command_subscriber, &node,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
+          ROS_COMMAND_TOPIC) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize subscription");
+  }
+
+  if (rclc_executor_add_subscription(executor, &command_subscriber, &command_msg,
+                                     &command_callback,
+                                     ON_NEW_DATA) != RCL_RET_OK) {
+    HARDCHECK("Failed to add subscription to executor");
+  }
+}
+
+void ros_create_seen_sub(rclc_executor_t *executor) {
+  PRINT_DEBUG("Subscribing to: %s", ROS_SEEN_TOPIC);
+  std_msgs__msg__Bool *msg = std_msgs__msg__Bool__create();
+
+  if (rclc_subscription_init_default(
+          &seen_subscriber, &node,
+          ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
+          ROS_SEEN_TOPIC) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize subscription");
+  }
+
+  if (rclc_executor_add_subscription(executor, &seen_subscriber, &msg,
+                                     &seen_callback, ON_NEW_DATA) != RCL_RET_OK) {
+    HARDCHECK("Failed to add subscription to executor");
+  }
+}
+
+void ros_init_ready_pub(rcl_publisher_t *publisher) {
+  PRINT_DEBUG("Initializing publisher for: %s", ROS_READY_TOPIC);
+  if (rclc_publisher_init_default(
+          publisher, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+          ROS_READY_TOPIC) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize publisher");
+  }
+}
+
+void ros_publish_ready(rcl_publisher_t *publisher) {
+  std_msgs__msg__Int32 msg;
+  std_msgs__msg__Int32__init(&msg);
+  msg.data = tag_num;
+
+  if (rcl_publish(publisher, &msg, NULL) != RCL_RET_OK) {
+    HARDCHECK("Failed to publish ready message");
+  }
 }
 
 void ros_init(void) {
-    allocator = rcl_get_default_allocator();
+  allocator = rcl_get_default_allocator();
 
-    geometry_msgs__msg__PoseArray__init(&all_robot_positions);
-    if (!geometry_msgs__msg__Pose__Sequence__init(&all_robot_positions.poses, MAX_ROBOTS_IN_GAME)) {
-        HARDCHECK("Failed to allocate memory for robot positions sequence");
-    }
+  rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
+  if (rcl_init_options_init(&init_options, allocator) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize rcl init options");
+  }
 
-    all_robot_positions.header.frame_id.data = frame_id_buffer;
-    all_robot_positions.header.frame_id.size = 0;
-    all_robot_positions.header.frame_id.capacity = FRAME_ID_CAPACITY;
-    all_robot_positions.header.frame_id.data[0] = '\0';
+  rmw_init_options_t *rmw_options =
+      rcl_init_options_get_rmw_init_options(&init_options);
+  rmw_uros_options_set_client_key(MICRO_ROS_CLIENT_KEY, rmw_options);
 
-    rcl_init_options_t init_options = rcl_get_zero_initialized_init_options();
-    if (rcl_init_options_init(&init_options, allocator) != RCL_RET_OK) {
-        HARDCHECK("Failed to initialize rcl init options");
-    }
+  if (rclc_support_init_with_options(&support, 0, NULL, &init_options,
+                                     &allocator) != RCL_RET_OK) {
+    HARDCHECK("Failed to initialize rclc support");
+  }
 
-    rmw_init_options_t *rmw_options = rcl_init_options_get_rmw_init_options(&init_options);
-    rmw_uros_options_set_client_key(MICRO_ROS_CLIENT_KEY, rmw_options);
+  char node_name[NODE_NAME_LENGTH];
+  snprintf(node_name, sizeof(node_name), "pico_%d", tag_num);
+  if (rclc_node_init_default(&node, node_name, "pico_namespace", &support) !=
+      RCL_RET_OK) {
+    HARDCHECK("Failed to initialize ROS2 Node");
+  }
 
-    if (rclc_support_init_with_options(&support, 0, NULL, &init_options, &allocator) != RCL_RET_OK) {
-        HARDCHECK("Failed to initialize rclc support");
-    }
+  if (rclc_executor_init(&executor, &support.context, 3, &allocator) !=
+      RCL_RET_OK) {
+    HARDCHECK("Failed to initialize executor");
+  }
 
-    char node_name[NODE_NAME_LENGTH];
-    snprintf(node_name, sizeof(node_name), "pico_%d", tag_num);
-    if (rclc_node_init_default(&node, node_name, "pico_namespace", &support) != RCL_RET_OK) {
-        HARDCHECK("Failed to initialize ROS2 Node");
-    }
+  ros_create_pos_sub(&executor);
+  ros_create_command_sub(&executor);
+  ros_create_seen_sub(&executor);
 
-    PRINT_DEBUG("Subscribing to: %s", POS_TOPIC);
-    if (rclc_subscription_init_best_effort(
-            &posearray_subscriber, &node,
-            ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray),
-            POS_TOPIC) != RCL_RET_OK) {
-        HARDCHECK("Failed to initialize subscription");
-    }
+  ros_init_ready_pub(&ready_publisher);
 
-    if (rclc_executor_init(&executor, &support.context, 1, &allocator) != RCL_RET_OK) {
-        HARDCHECK("Failed to initialize executor");
-    }
-
-    if (rclc_executor_add_subscription(&executor, &posearray_subscriber,
-                                       &all_robot_positions, &posearray_callback,
-                                       ON_NEW_DATA) != RCL_RET_OK) {
-        HARDCHECK("Failed to add subscription to executor");
-    }
-
-    PRINT_SUCCESS("Entire ROS initialization complete!");
+  PRINT_SUCCESS("Entire ROS initialization complete!");
 }
 
 void wifi_init() {
-    PRINT_DEBUG("Starting Wi-Fi and micro-ROS transport setup...");
-    int wifi_retry_count = 0;
+  PRINT_DEBUG("Starting Wi-Fi and micro-ROS transport setup...");
+  int wifi_retry_count = 0;
 
-    while (wifi_retry_count < 5) {
-        bool arch_started = false;
+  while (wifi_retry_count < 5) {
+    bool arch_started = false;
 
-        if (cyw43_arch_init_with_country(CYW43_COUNTRY_NETHERLANDS) == 0) {
-            arch_started = true;
-            
-            // Disable power-save mode for low latency (< 5Hz micro-ROS traffic)
-            cyw43_wifi_pm(&cyw43_state, CYW43_NO_POWERSAVE_MODE);
-            cyw43_arch_enable_sta_mode();
+    if (cyw43_arch_init_with_country(CYW43_COUNTRY_NETHERLANDS) == 0) {
+      arch_started = true;
 
-            if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000) == 0) {
-                rmw_uros_set_custom_transport(
-                    false, &picow_params, picow_udp_transport_open,
-                    picow_udp_transport_close, picow_udp_transport_write,
-                    picow_udp_transport_read);
-                
-                PRINT_SUCCESS("Wi-Fi connected and micro-ROS transport configured!");
-                cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
-                return;
-            }
-        }
+      // Disable power-save mode for low latency (< 5Hz micro-ROS traffic)
+      cyw43_wifi_pm(&cyw43_state, CYW43_NO_POWERSAVE_MODE);
+      cyw43_arch_enable_sta_mode();
 
-        wifi_retry_count++;
-        printf("[RETRY] Wi-Fi Connection failed (%d/5). \n", wifi_retry_count);
+      if (cyw43_arch_wifi_connect_timeout_ms(
+              ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 10000) == 0) {
+        rmw_uros_set_custom_transport(
+            false, &picow_params, picow_udp_transport_open,
+            picow_udp_transport_close, picow_udp_transport_write,
+            picow_udp_transport_read);
 
-        if (arch_started) {
-            cyw43_arch_deinit();
-        }
-        sleep_ms(2000);
+        PRINT_SUCCESS("Wi-Fi connected and micro-ROS transport configured!");
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        return;
+      }
     }
-    HARDCHECK("Wi-Fi driver stuck or Access Point unavailable");
+
+    wifi_retry_count++;
+    printf("[RETRY] Wi-Fi Connection failed (%d/5). \n", wifi_retry_count);
+
+    if (arch_started) {
+      cyw43_arch_deinit();
+    }
+    sleep_ms(2000);
+  }
+  HARDCHECK("Wi-Fi driver stuck or Access Point unavailable");
 }
 
 int wifi_connected(void) {
-    return (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP);
+  return (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) ==
+          CYW43_LINK_UP);
 }
 
 int wifi_reconnect(void) {
-    printf("[WARNING] Attempting Wi-Fi reconnection...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK, 20000) == 0) {
-        printf("[SUCCESS] Reconnected.\n");
-        return 1;
-    }
-    printf("[ERROR] Failed to reconnect.\n");
-    return 0;
+  printf("[WARNING] Attempting Wi-Fi reconnection...\n");
+  if (cyw43_arch_wifi_connect_timeout_ms(ssid, pass, CYW43_AUTH_WPA2_AES_PSK,
+                                         20000) == 0) {
+    printf("[SUCCESS] Reconnected.\n");
+    return 1;
+  }
+  printf("[ERROR] Failed to reconnect.\n");
+  return 0;
 }
 
 // --- Main Processing Loops ---
 void check_connections_and_spin(void) {
-    if (!wifi_connected()) {
-        wifi_reconnect();
-    }
-    // Spin executor to handle callbacks
-    rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
+  if (!wifi_connected()) {
+    wifi_reconnect();
+  }
+  // Spin executor to handle callbacks
+  rclc_executor_spin_some(&executor, RCL_MS_TO_NS(5));
 }
 
 void process_movement_logic(void) {
-    int64_t current_time = uxr_millis();
+  int64_t current_time = uxr_millis();
 
-    // 1. Global positioning systemic loss guard
-    if ((current_time - last_pos_callback) > MAX_MILLIS_WITHOUT_ANY_POSITION) {
-        stop();
-        HARDCHECK("Global Safety Halt: No system updates on topic [%s]", POS_TOPIC);
-    }
+  // Global positioning systemic loss guard
+  //   if ((current_time - last_pos_callback) > MAX_MILLIS_WITHOUT_ANY_POSITION)
+  //   {
+  //     stop();
+  //     HARDCHECK("Global Safety Halt: No system updates on topic [%s]",
+  //     POS_TOPIC);
+  //   }
 
-    // 2. Resolve Runner Target location
-    if (runner_tag != -1) {
-        if (get_tag_pos(&target, &all_robot_positions, runner_tag) != 0) {
-            PRINT_DEBUG("Runner TAG [%d] missing from updates; skipped computation cycle.", runner_tag);
-			stop();
-            return; 
-        }
-    }
+  // Resolve Runner Target location
+  //   if (runner_tag != -1) {
+  //     if (get_tag_pose(&target, &all_robot_positions, runner_tag) != 0) {
+  //       PRINT_DEBUG(
+  //           "Runner TAG [%d] missing from updates; skipped computation
+  //           cycle.", runner_tag);
+  //       stop();
+  //       return;
+  //     }
+  //   }
 
-    // 3. Local Positioning loss guard
-    if ((current_time - last_own_pos_callback) > MAX_MILLIS_WITHOUT_NEW_POSITION) {
-        PRINT_DEBUG("Local Safety Halt: No self tracking data for %d ms. Stopping motors.", MAX_MILLIS_WITHOUT_NEW_POSITION);
-        stop();
-        return;
-    }
+  set_pose(&target, 0, 0, 0.0);
 
-    // 4. Algorithm Calculation and Navigation Execute 
-    geometry_msgs__msg__Pose own_robot_pose;
-    if (all_robot_positions.poses.size > 0 && get_tag_pos(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
-        
-        // STACK ALLOCATION: Safer, faster, prevents Heap fragmentation on microcontrollers
-        geometry_msgs__msg__Pose next_step; 
-        geometry_msgs__msg__Pose__init(&next_step);
+  // Local Positioning loss guard
+  if ((current_time - last_own_pos_callback) >
+      MAX_MILLIS_WITHOUT_NEW_POSITION) {
+    // PRINT_DEBUG(
+    //     "Local Safety Halt: No self tracking data for %d ms. Stopping
+    //     motors.", MAX_MILLIS_WITHOUT_NEW_POSITION);
+    stop();
+    // return;
+  }
+
+  // Algorithm Calculation and Navigation Execute
+  geometry_msgs__msg__Pose own_robot_pose;
+  if (all_robot_positions.poses.size > 0 &&
+      get_tag_pose(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
+
+    geometry_msgs__msg__Pose next_step;
+    geometry_msgs__msg__Pose__init(&next_step);
 
         calculate_optimal_move(&next_step.position, &own_robot_pose.position,
                                &all_robot_positions, &target.position, &target.position);
 
-        move_to(&own_robot_pose, &next_step);
-        
-        geometry_msgs__msg__Pose__fini(&next_step);
-    }
+    move_to(&own_robot_pose, &next_step);
+
+    geometry_msgs__msg__Pose__fini(&next_step);
+  }
 }
 
 int main(void) {
-    stdio_init_all();
-    sleep_ms(3000); // Allow hardware lines to settle
+  stdio_init_all();
+  sleep_ms(3000); // Allow hardware lines to settle
 
-    // Initialize Network and ROS Middleware stack
-    wifi_init();
-    ping_agent();
-    ros_init();
+  // Initialize Network and ROS Middleware stack
+  wifi_init();
+  ping_agent();
+  ros_init();
 
-    // Hardware Actuator Initialization
-    init_servo_pwm(PWM_LM);
-    init_servo_pwm(PWM_RM);
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
+  // Hardware Actuator Initialization
+  init_servo_pwm(PWM_LM);
+  init_servo_pwm(PWM_RM);
+  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
 
-    // CRITICAL FIX: Seed random once at start, not inside the hot loop!
-    srand(to_ms_since_boot(get_absolute_time())); 
+  // CRITICAL FIX: Seed random once at start, not inside the hot loop!
+  srand(to_ms_since_boot(get_absolute_time()));
 
-    PRINT_DEBUG("Entering active runtime loop...");
+  last_pos_callback = uxr_millis();
 
-	last_pos_callback = uxr_millis();
+  PRINT_DEBUG("Publishing READY!");
+  ros_publish_ready(&ready_publisher);
 
-    while (true) {
-        check_connections_and_spin();
-        process_movement_logic();
-    }
+  PRINT_DEBUG("Entering active runtime loop...");
+  while (true) {
+    check_connections_and_spin();
+    process_movement_logic();
+  }
 
-    cyw43_arch_deinit();
-    return 0;
+  cyw43_arch_deinit();
+  return 0;
 }
