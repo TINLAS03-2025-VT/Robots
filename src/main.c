@@ -25,15 +25,18 @@
 #include <rclc/executor.h>
 #include <rclc/rclc.h>
 #include <rmw_microros/rmw_microros.h>
+#include <string.h>
 #include <uxr/client/util/time.h>
 
 // Project drivers and settings
+#include "geometry_msgs/msg/pose.h"
 #include "movement.h"
 #include "picow_udp_transports.h"
 #include "rcl/publisher.h"
 #include "rclc/executor_handle.h"
 #include "rclc/subscription.h"
 #include "rff-algorithm.h"
+#include "rmw/event.h"
 #include "secrets.h"
 #include "settings.h"
 
@@ -53,6 +56,13 @@
 #define NODE_NAME_LENGTH                                                       \
   (NODE_BASE_NAME_LENGTH + NODE_ROBOT_NUMBER_LENGTH + NODE_NAME_NULL_CHAR)
 
+// --- Status Struct ---
+enum game_state_t {
+  STATE_IDLE,   // Initial state, waiting for commands, not moving
+  STATE_PAUSED, // Game is paused, robot should stop moving
+  STATE_RUNNING // Game is running, robot should move
+};
+
 // --- Configuration & Credentials ---
 static const char ssid[] = WIFI_SSID;
 static const char pass[] = WIFI_PASSWORD;
@@ -68,13 +78,15 @@ static rcl_subscription_t command_subscriber;
 static rcl_subscription_t seen_subscriber;
 static rcl_publisher_t ready_publisher;
 std_msgs__msg__String command_msg;
+std_msgs__msg__Bool seen_msg;
 char command_string_buffer[COMMAND_BUFFER_CAPACITY];
 
 // --- Shared Global Application State ---
 static geometry_msgs__msg__PoseArray all_robot_positions;
 static geometry_msgs__msg__Pose target;
-static int runner_tag = 4; // Default runner target assignment
+static int runner_tag = 3; // Default runner target assignment
 static char frame_id_buffer[FRAME_ID_CAPACITY];
+static enum game_state_t game_state = STATE_IDLE;
 
 // --- Telemetry & Heartbeats ---
 static uint32_t posearray_rx_count = 0;
@@ -92,6 +104,7 @@ int get_tag_pos(geometry_msgs__msg__Pose *robot_pose_buffer,
 void posearray_callback(const void *msgin);
 void check_connections_and_spin(void);
 void process_movement_logic(void);
+void ros_publish_ready(rcl_publisher_t *publisher);
 
 // --- Lookup Functions ---
 int get_tag_pose(geometry_msgs__msg__Pose *robot_pose_buffer,
@@ -119,8 +132,7 @@ void ping_agent() {
       PRINT_SUCCESS("Agent succesfully pinged!");
     } else {
       agent_retry_count++;
-      PRINT_DEBUG("Agent not found. Retrying (%d/10)...",
-                 agent_retry_count);
+      PRINT_DEBUG("Agent not found. Retrying (%d/10)...", agent_retry_count);
       sleep_ms(1000);
 
       if (agent_retry_count >= 10)
@@ -135,8 +147,8 @@ void posearray_callback(const void *msgin) {
   last_pos_callback = uxr_millis();
   posearray_rx_count++;
 
-  PRINT_DEBUG("Received positions message #%lu",
-         (unsigned long)posearray_rx_count);
+  //   PRINT_DEBUG("Received positions message #%lu",
+  //               (unsigned long)posearray_rx_count);
 
   geometry_msgs__msg__Pose own_robot_pose;
   if (get_tag_pose(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
@@ -147,19 +159,59 @@ void posearray_callback(const void *msgin) {
 void command_callback(const void *msgin) {
   const std_msgs__msg__String *msg = (const std_msgs__msg__String *)msgin;
 
-  if (msg != NULL && msg->data.data != NULL) {
-    PRINT_DEBUG("Command received! Message content: %s", msg->data.data);
-  } else {
+  if (msg == NULL || msg->data.data == NULL) {
     PRINT_DEBUG("Command received, but data buffer is empty.");
+    return;
+  }
+
+  strncpy(command_string_buffer, msg->data.data, COMMAND_BUFFER_CAPACITY - 1);
+  command_string_buffer[COMMAND_BUFFER_CAPACITY - 1] =
+      '\0'; // Force null-termination
+
+  PRINT_DEBUG("Command received! Message content: %s", command_string_buffer);
+
+  if (strncmp(command_string_buffer, "start ", 6) == 0) {
+    PRINT_DEBUG("MATCH: Start command");
+
+    int runner_num = -1;
+    if (sscanf(command_string_buffer + 6, "%d", &runner_num) == 1) {
+      if (runner_num >= 0 &&
+          runner_num < 1000) { // Arbitrary upper limit for sanity
+        runner_tag = runner_num;
+        PRINT_DEBUG("Runner target updated to TAG [%d]", runner_tag);
+
+        if (runner_tag != TAG_NUM)
+          sleep_ms(2000);
+
+        game_state = STATE_RUNNING;
+      } else {
+        PRINT_DEBUG("Invalid runner number: %d. Must be non-negative.",
+                    runner_num);
+      }
+    } else {
+      PRINT_DEBUG("Start command missing a valid integer.");
+    }
+  } else if (strcmp(command_string_buffer, "pause") == 0) {
+    PRINT_DEBUG("MATCH: Pause command");
+    stop();
+    game_state = STATE_PAUSED;
+  } else if (strcmp(command_string_buffer, "resume") == 0) {
+    PRINT_DEBUG("MATCH: Resume command");
+    game_state = STATE_RUNNING;
+  } else if (strcmp(command_string_buffer, "reset") == 0) {
+    PRINT_DEBUG("MATCH: Reset command");
+    runner_tag = -1; // Reset to default runner target
+    game_state = STATE_IDLE;
+    HARDCHECK("Resetting due to command!");
+  } else {
+    printf("Input: '%s' -> No match found\n", command_string_buffer);
   }
 }
 
 void seen_callback(const void *msgin) {
-  // Placeholder for future "seen" subscription callback
-  //PRINT_DEBUG("Seen message received!\n Message content: %s\n", (char *)msgin);
-
   const std_msgs__msg__Bool *seen_msg = (const std_msgs__msg__Bool *)msgin;
-  if (seen_msg->data) {
+
+  if (seen_msg->data == true) {
     PRINT_DEBUG("Robot sees runner.");
     if (get_tag_pose(&target, &all_robot_positions, runner_tag) == 0) {
       PRINT_DEBUG(
@@ -190,6 +242,8 @@ void ros_create_pos_sub(rclc_executor_t *executor) {
   all_robot_positions.header.frame_id.capacity = FRAME_ID_CAPACITY;
   all_robot_positions.header.frame_id.data[0] = '\0';
 
+  geometry_msgs__msg__Pose__init(&target);
+
   if (rclc_subscription_init_best_effort(
           &posearray_subscriber, &node,
           ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, PoseArray),
@@ -208,7 +262,7 @@ void ros_create_command_sub(rclc_executor_t *executor) {
   PRINT_DEBUG("Subscribing to: %s", ROS_COMMAND_TOPIC);
 
   std_msgs__msg__String__init(&command_msg);
-  
+
   command_msg.data.data = command_string_buffer;
   command_msg.data.capacity = COMMAND_BUFFER_CAPACITY;
   command_msg.data.size = 0;
@@ -220,8 +274,8 @@ void ros_create_command_sub(rclc_executor_t *executor) {
     HARDCHECK("Failed to initialize subscription");
   }
 
-  if (rclc_executor_add_subscription(executor, &command_subscriber, &command_msg,
-                                     &command_callback,
+  if (rclc_executor_add_subscription(executor, &command_subscriber,
+                                     &command_msg, &command_callback,
                                      ON_NEW_DATA) != RCL_RET_OK) {
     HARDCHECK("Failed to add subscription to executor");
   }
@@ -229,7 +283,8 @@ void ros_create_command_sub(rclc_executor_t *executor) {
 
 void ros_create_seen_sub(rclc_executor_t *executor) {
   PRINT_DEBUG("Subscribing to: %s", ROS_SEEN_TOPIC);
-  std_msgs__msg__Bool *msg = std_msgs__msg__Bool__create();
+
+  seen_msg.data = false;
 
   if (rclc_subscription_init_default(
           &seen_subscriber, &node,
@@ -238,8 +293,9 @@ void ros_create_seen_sub(rclc_executor_t *executor) {
     HARDCHECK("Failed to initialize subscription");
   }
 
-  if (rclc_executor_add_subscription(executor, &seen_subscriber, &msg,
-                                     &seen_callback, ON_NEW_DATA) != RCL_RET_OK) {
+  if (rclc_executor_add_subscription(executor, &seen_subscriber, &seen_msg,
+                                     &seen_callback,
+                                     ON_NEW_DATA) != RCL_RET_OK) {
     HARDCHECK("Failed to add subscription to executor");
   }
 }
@@ -368,34 +424,28 @@ void process_movement_logic(void) {
   int64_t current_time = uxr_millis();
 
   // Global positioning systemic loss guard
-  //   if ((current_time - last_pos_callback) > MAX_MILLIS_WITHOUT_ANY_POSITION)
-  //   {
-  //     stop();
-  //     HARDCHECK("Global Safety Halt: No system updates on topic [%s]",
-  //     POS_TOPIC);
-  //   }
+  if ((current_time - last_pos_callback) > MAX_MILLIS_WITHOUT_ANY_POSITION) {
+    stop();
+    HARDCHECK("Global Safety Halt: No system updates on topic [%s]", POS_TOPIC);
+  }
 
   // Resolve Runner Target location
-  //   if (runner_tag != -1) {
-  //     if (get_tag_pose(&target, &all_robot_positions, runner_tag) != 0) {
-  //       PRINT_DEBUG(
-  //           "Runner TAG [%d] missing from updates; skipped computation
-  //           cycle.", runner_tag);
-  //       stop();
-  //       return;
-  //     }
-  //   }
-
-  set_pose(&target, 0, 0, 0.0);
+  if (runner_tag != -1) {
+    int tag_pos = get_tag_pose(&target, &all_robot_positions, runner_tag);
+    if (tag_pos != 0) {
+      PRINT_DEBUG(
+          "Runner TAG [%d] missing from updates; skipped computationcycle.",
+          runner_tag);
+      stop();
+      return;
+    }
+  }
 
   // Local Positioning loss guard
   if ((current_time - last_own_pos_callback) >
       MAX_MILLIS_WITHOUT_NEW_POSITION) {
-    // PRINT_DEBUG(
-    //     "Local Safety Halt: No self tracking data for %d ms. Stopping
-    //     motors.", MAX_MILLIS_WITHOUT_NEW_POSITION);
     stop();
-    // return;
+    return;
   }
 
   // Algorithm Calculation and Navigation Execute
@@ -403,11 +453,28 @@ void process_movement_logic(void) {
   if (all_robot_positions.poses.size > 0 &&
       get_tag_pose(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
 
+    PRINT_DEBUG("Own pos: (%.3f, %.3f) - (%.3f, %.3f, %.3f, %.3f)",
+                own_robot_pose.position.x, own_robot_pose.position.y,
+                own_robot_pose.orientation.x, own_robot_pose.orientation.y,
+                own_robot_pose.orientation.z, own_robot_pose.orientation.w);
+    PRINT_DEBUG("Target pos: (%.3f, %.3f)", target.position.x,
+                target.position.y);
+
     geometry_msgs__msg__Pose next_step;
     geometry_msgs__msg__Pose__init(&next_step);
 
-        calculate_optimal_move(&next_step.position, &own_robot_pose.position,
-                               &all_robot_positions, &target.position, &target.position);
+    if (runner_tag == TAG_NUM) {
+      calculate_hunter_move(&next_step.position, &own_robot_pose.position,
+                            &all_robot_positions, &target.position,
+                            &target.position);
+    } else {
+      // TODO: Implement runner movement logic
+	  stop();
+	  return;
+    }
+
+    PRINT_DEBUG("Next step: (%.3f, %.3f)", next_step.position.x,
+                next_step.position.y);
 
     move_to(&own_robot_pose, &next_step);
 
@@ -429,7 +496,6 @@ int main(void) {
   init_servo_pwm(PWM_RM);
   cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
 
-  // CRITICAL FIX: Seed random once at start, not inside the hot loop!
   srand(to_ms_since_boot(get_absolute_time()));
 
   last_pos_callback = uxr_millis();
@@ -437,10 +503,20 @@ int main(void) {
   PRINT_DEBUG("Publishing READY!");
   ros_publish_ready(&ready_publisher);
 
+  // set_pose(&target, 0.0f, 0.0f, 0.0f);
+
   PRINT_DEBUG("Entering active runtime loop...");
   while (true) {
     check_connections_and_spin();
-    process_movement_logic();
+
+    if (game_state == STATE_RUNNING) {
+      process_movement_logic();
+    } else if (game_state == STATE_PAUSED) {
+      stop();
+    } else {
+      // STATE_IDLE, do nothing and wait for commands
+      stop();
+    }
   }
 
   cyw43_arch_deinit();

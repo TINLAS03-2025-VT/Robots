@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define TAG_NUM 3
+#define TAG_NUM 5
 #define MAX_ROBOTS_IN_GAME 5
 
 /* 	Pathfinding algorithm settings
@@ -30,6 +30,11 @@
 #define MOVE_SPEED_RPS 0.4f		// Moving speed forward
 #define MAX_TURNING_RPS 0.6f		// Max turn speed
 #define MIN_TURNING_RPS 0.05f
+
+// Runner movement settings:
+#define HUNTER_FLEE_RADIUS       1.5f   // Distance to trigger fleeing behavior
+#define CORNER_CHANGE_INTERVAL_MS 4000  // Time before swapping random corners
+#define K_RUNNER_FLEE            3.5f   // Scaling multiplier for escaping hunters
 
 // No effect, because it's continuous
 #define MIN_MOVE_DISTANCE 0.3f  	// Distance at which to stop moving straight to a point

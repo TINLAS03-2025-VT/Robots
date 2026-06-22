@@ -14,7 +14,6 @@ add_executable(${TARGET_NAME}
 
 target_link_libraries(${TARGET_NAME}
     hardware_pwm
-    m
     microros
     pico_cyw43_arch_lwip_threadsafe_background
     pico_double

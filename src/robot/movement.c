@@ -199,7 +199,8 @@ void turn_ms(int deg, float RPS, uint32_t ms_sleep) {
     return;
 
   float RPS_L, RPS_R;
-  if (deg > 0) {
+  if (deg < 0) {
+    //   if (deg > 0) {
     // Positive degrees: Turn Right (Left wheel forward, Right wheel backward)
     RPS_L = RPS;
     RPS_R = -RPS;
@@ -254,7 +255,7 @@ void turn_continuous_relative(int deg) {
   float RPS = range_map_f((float)abs(deg), 0.0f, 180.0f, MIN_TURNING_RPS,
                           MAX_TURNING_RPS);
 
-  PRINT_DEBUG("DEG [%d]: MAPPED RPS: [%.3f]", deg, RPS);
+  //   PRINT_DEBUG("DEG [%d]: MAPPED RPS: [%.3f]", deg, RPS);
 
   float RPS_L, RPS_R;
   if (deg > 0) {
@@ -280,6 +281,13 @@ float quaternion_to_yaw(geometry_msgs__msg__Quaternion *q) {
 
 float rad_to_deg(float rad) { return rad * 180.0 / PI; }
 float deg_to_rad(float deg) { return deg * (M_PI / 180.0); }
+
+float trigonometric_deg_to_compass_deg(float deg) {
+  float compass_deg = 90.0f - deg;
+  if (compass_deg < 0.0f)
+    compass_deg += 360.0f;
+  return compass_deg;
+}
 
 // Function to easily set a Pose and primarily its Yaw
 void set_pose(geometry_msgs__msg__Pose *pose, float x, float y, float yaw_deg) {
@@ -332,9 +340,9 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
   }
 
   float yaw = rad_to_deg(quaternion_to_yaw(&own_pos->orientation));
-  float angle_to_target =
+  float angle_to_target = trigonometric_deg_to_compass_deg(
       rad_to_deg(atan2(target_pos->position.y - own_pos->position.y,
-                       target_pos->position.x - own_pos->position.x));
+                       target_pos->position.x - own_pos->position.x)));
   float delta_angle = angle_to_target - yaw;
 
   // Normalize delta_angle to be between -180 and 180 degrees
@@ -364,7 +372,7 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
              (float)DEADZONE); // delta_angle > 0.0
 
     turn_continuous_relative(delta_angle);
-	return;
+    return;
   }
 
   printf("[MOVE] move forward: distance=%.3f yaw=%.2f target_angle=%.2f "
