@@ -258,7 +258,7 @@ void turn_continuous_relative(int deg) {
   //   PRINT_DEBUG("DEG [%d]: MAPPED RPS: [%.3f]", deg, RPS);
 
   float RPS_L, RPS_R;
-  if (deg > 0) {
+  if (deg < 0) {
     // Positive degrees: Turn Right (Left wheel forward, Right wheel backward)
     RPS_L = RPS;
     RPS_R = -RPS;
@@ -340,9 +340,9 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
   }
 
   float yaw = rad_to_deg(quaternion_to_yaw(&own_pos->orientation));
-  float angle_to_target = trigonometric_deg_to_compass_deg(
+  float angle_to_target =
       rad_to_deg(atan2(target_pos->position.y - own_pos->position.y,
-                       target_pos->position.x - own_pos->position.x)));
+                       target_pos->position.x - own_pos->position.x));
   float delta_angle = angle_to_target - yaw;
 
   // Normalize delta_angle to be between -180 and 180 degrees

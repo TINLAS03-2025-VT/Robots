@@ -17,9 +17,9 @@
 
 #define K_WALL 2.5f						// Wall repulsion, always higher than total hunter repulsion
 #define WALL_SAFETY_MARGIN 1.2f			// Distance from wall where repulsion kicks in
-
 #define K_RAND 0.7f 					// Randomness weight (chance)
 
+// Playing field dimensions, in units of the position system (1x1 meter field = 10x10 units)
 #define FIELD_MIN_X 0.0f
 #define FIELD_MAX_X 10.0f
 #define FIELD_MIN_Y 0.0f
@@ -31,10 +31,13 @@
 #define MAX_TURNING_RPS 0.6f		// Max turn speed
 #define MIN_TURNING_RPS 0.05f
 
+// Hunter specific movement settings
+#define ROAMING_TARGET_CHANGE_DISTANCE 0.5f
+
 // Runner movement settings:
-#define HUNTER_FLEE_RADIUS       1.5f   // Distance to trigger fleeing behavior
-#define CORNER_CHANGE_INTERVAL_MS 4000  // Time before swapping random corners
-#define K_RUNNER_FLEE            3.5f   // Scaling multiplier for escaping hunters
+#define HUNTER_FLEE_RADIUS       3.5f   // Distance to trigger fleeing behavior
+#define CORNER_CHANGE_INTERVAL_MS 10000  // Time before swapping random corners
+#define K_RUNNER_FLEE            4.5f   // Scaling multiplier for escaping hunters
 
 // No effect, because it's continuous
 #define MIN_MOVE_DISTANCE 0.3f  	// Distance at which to stop moving straight to a point

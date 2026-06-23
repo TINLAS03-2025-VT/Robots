@@ -28,8 +28,8 @@ target_include_directories(${TARGET_NAME}
     ${CMAKE_CURRENT_LIST_DIR}/robot
 )
 
-SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections")
-SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections")
+SET(CMAKE_C_FLAGS  "${CMAKE_C_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections -O2")
+SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -Wall -Wextra -ffunction-sections -fdata-sections -O2")
 
 # Configure Pico
 pico_enable_stdio_usb(${TARGET_NAME} 1)

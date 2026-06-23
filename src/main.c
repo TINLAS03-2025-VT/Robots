@@ -84,7 +84,8 @@ char command_string_buffer[COMMAND_BUFFER_CAPACITY];
 // --- Shared Global Application State ---
 static geometry_msgs__msg__PoseArray all_robot_positions;
 static geometry_msgs__msg__Pose target;
-static int runner_tag = 3; // Default runner target assignment
+static int runner_tag = -1; // Default runner target assignment
+static bool sees_runner = false;
 static char frame_id_buffer[FRAME_ID_CAPACITY];
 static enum game_state_t game_state = STATE_IDLE;
 
@@ -202,7 +203,8 @@ void command_callback(const void *msgin) {
     PRINT_DEBUG("MATCH: Reset command");
     runner_tag = -1; // Reset to default runner target
     game_state = STATE_IDLE;
-    HARDCHECK("Resetting due to command!");
+    sees_runner = false;
+    ros_publish_ready(&ready_publisher);
   } else {
     printf("Input: '%s' -> No match found\n", command_string_buffer);
   }
@@ -211,8 +213,10 @@ void command_callback(const void *msgin) {
 void seen_callback(const void *msgin) {
   const std_msgs__msg__Bool *seen_msg = (const std_msgs__msg__Bool *)msgin;
 
-  if (seen_msg->data == true) {
-    PRINT_DEBUG("Robot sees runner.");
+  if (seen_msg->data == true && runner_tag != -1) {
+    PRINT_DEBUG("Robot IS ABLE TO SEE the runner.");
+    sees_runner = true;
+
     if (get_tag_pose(&target, &all_robot_positions, runner_tag) == 0) {
       PRINT_DEBUG(
           "Target position updated. Target coordinates: x=%.2f, y=%.2f, z=%.2f",
@@ -223,7 +227,8 @@ void seen_callback(const void *msgin) {
           runner_tag);
     }
   } else {
-    PRINT_DEBUG("Robot has NOT seen the runner.");
+    PRINT_DEBUG("Robot CAN NOT seen the runner.");
+    sees_runner = false;
   }
 }
 
@@ -423,32 +428,27 @@ void check_connections_and_spin(void) {
 void process_movement_logic(void) {
   int64_t current_time = uxr_millis();
 
-  // Global positioning systemic loss guard
+  // Guard against not receiving any position updates at all
   if ((current_time - last_pos_callback) > MAX_MILLIS_WITHOUT_ANY_POSITION) {
     stop();
     HARDCHECK("Global Safety Halt: No system updates on topic [%s]", POS_TOPIC);
   }
 
-  // Resolve Runner Target location
-  if (runner_tag != -1) {
-    int tag_pos = get_tag_pose(&target, &all_robot_positions, runner_tag);
-    if (tag_pos != 0) {
-      PRINT_DEBUG(
-          "Runner TAG [%d] missing from updates; skipped computationcycle.",
-          runner_tag);
-      stop();
-      return;
-    }
-  }
-
-  // Local Positioning loss guard
+  // Guard against not receiving own position updates
   if ((current_time - last_own_pos_callback) >
       MAX_MILLIS_WITHOUT_NEW_POSITION) {
     stop();
     return;
   }
 
-  // Algorithm Calculation and Navigation Execute
+  // Guard against unassigned runner target
+  if (runner_tag == -1) {
+    PRINT_DEBUG("Runner TAG not assigned, skipping computation cycle.");
+    stop();
+    return;
+  }
+
+  // Algorithm branch based on role (runner or hunter)
   geometry_msgs__msg__Pose own_robot_pose;
   if (all_robot_positions.poses.size > 0 &&
       get_tag_pose(&own_robot_pose, &all_robot_positions, tag_num) == 0) {
@@ -457,25 +457,46 @@ void process_movement_logic(void) {
                 own_robot_pose.position.x, own_robot_pose.position.y,
                 own_robot_pose.orientation.x, own_robot_pose.orientation.y,
                 own_robot_pose.orientation.z, own_robot_pose.orientation.w);
-    PRINT_DEBUG("Target pos: (%.3f, %.3f)", target.position.x,
-                target.position.y);
 
     geometry_msgs__msg__Pose next_step;
     geometry_msgs__msg__Pose__init(&next_step);
 
-    if (runner_tag == TAG_NUM) {
-      calculate_hunter_move(&next_step.position, &own_robot_pose.position,
-                            &all_robot_positions, &target.position,
-                            &target.position);
-    } else {
-      // TODO: Implement runner movement logic
-	  stop();
-	  return;
+    // HUNTER BRANCH
+    if (runner_tag != TAG_NUM) {
+      if (!sees_runner) {		// Roaming behavior if the runner is not seen
+        PRINT_DEBUG("ROAMING BEHAVIOR: Runner TAG [%d] not seen, executing "
+                    "roaming behavior.",
+                    runner_tag);
+		calculate_roam_move(&next_step.position, &own_robot_pose.position,
+							&all_robot_positions);
+      } else {
+        if (get_tag_pose(&target, &all_robot_positions, runner_tag) != 0) {
+          PRINT_DEBUG("Runner TAG [%d] missing from updates; skipped "
+                      "computation cycle.",
+                      runner_tag);
+          stop();
+          geometry_msgs__msg__Pose__fini(&next_step);
+          return;
+        }
+
+        PRINT_DEBUG("Target pos: (%.3f, %.3f)", target.position.x,
+                    target.position.y);
+
+        // Calculate hunter trajectory
+        calculate_hunter_move_2(&next_step.position, &own_robot_pose.position,
+                                &all_robot_positions, &target.position);
+      }
+    }
+    // RUNNER BRANCH
+    else if (runner_tag == TAG_NUM) {
+      // Calculate runner trajectory
+      calculate_runner_move_2(&next_step.position, &own_robot_pose.position,
+                              &all_robot_positions);
     }
 
+    // EXECUTE MOVEMENT
     PRINT_DEBUG("Next step: (%.3f, %.3f)", next_step.position.x,
                 next_step.position.y);
-
     move_to(&own_robot_pose, &next_step);
 
     geometry_msgs__msg__Pose__fini(&next_step);
@@ -502,8 +523,6 @@ int main(void) {
 
   PRINT_DEBUG("Publishing READY!");
   ros_publish_ready(&ready_publisher);
-
-  // set_pose(&target, 0.0f, 0.0f, 0.0f);
 
   PRINT_DEBUG("Entering active runtime loop...");
   while (true) {
