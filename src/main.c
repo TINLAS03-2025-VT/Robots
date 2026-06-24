@@ -184,6 +184,9 @@ void command_callback(const void *msgin) {
         if (runner_tag != TAG_NUM)
           sleep_ms(2000);
 
+		last_pos_callback = uxr_millis();
+		last_own_pos_callback = uxr_millis();
+
         game_state = STATE_RUNNING;
       } else {
         PRINT_DEBUG("Invalid runner number: %d. Must be non-negative.",
@@ -518,8 +521,6 @@ int main(void) {
   cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, true);
 
   srand(to_ms_since_boot(get_absolute_time()));
-
-  last_pos_callback = uxr_millis();
 
   PRINT_DEBUG("Publishing READY!");
   ros_publish_ready(&ready_publisher);

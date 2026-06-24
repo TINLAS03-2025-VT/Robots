@@ -3,17 +3,17 @@
 
 #include <stdint.h>
 
-#define TAG_NUM 5
-#define MAX_ROBOTS_IN_GAME 5
+#define TAG_NUM 3
+#define MAX_ROBOTS_IN_GAME 10
 
 /* 	Pathfinding algorithm settings
 *	These settings were tweaked to work well on a field of 1x1 meters, having 
 */
 #define K_GOAL 1.2f 					// Attraction/repulsion weight of goal
-#define GOAL_TARGETED_DISTANCE 2.0f		// Ideal radius around the runner
+#define GOAL_TARGETED_DISTANCE 1.5f		// Ideal radius around the runner
 
 #define K_HUNTER 1.5f 					// Hunter repulsion weight
-#define HUNTER_SPACING 2.8f				// Ideal distance between brother hunters
+#define HUNTER_SPACING 1.5f				// Ideal distance between brother hunters
 
 #define K_WALL 2.5f						// Wall repulsion, always higher than total hunter repulsion
 #define WALL_SAFETY_MARGIN 1.2f			// Distance from wall where repulsion kicks in
@@ -27,7 +27,7 @@
 
 // Movement settings
 #define DEADZONE 10.0f    		// Deadzone degrees, minimal difference to turn
-#define MOVE_SPEED_RPS 0.4f		// Moving speed forward
+#define MOVE_SPEED_RPS 0.6f		// Moving speed forward
 #define MAX_TURNING_RPS 0.6f		// Max turn speed
 #define MIN_TURNING_RPS 0.05f
 
