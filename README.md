@@ -23,7 +23,7 @@ Used for testing whether messages come through to the Pico with the MicroROS age
 2. In the root repository directory open the CMakeLists.txt and change the PICO_PLATFORM and PICO_BOARD (line 5 and 6) to the correct platform and board.
 3. If the projects were built before and the Pico platform and board were changed, delete the build folder.
 4. Setup the environment and compile the code by running `cmake -P setup.cmake`. The output of the compilation will be in `build/src`.
-5. To flash the software, plug in the Pico in boot mode and copy the \<Software Name>.uf2 to it or, if the previous step has been done before, run: `external/picotool/build/picotool load -f -x build/src/pico_micro_ros_example.uf2`
+5. To flash the software, plug in the Pico in boot mode and copy the \<Software Name>.uf2 to it or, if the previous step has been done before, run: `external/picotool/build/picotool load -f -x build/src/main.uf2`
 6. Open a serial monitor on the pico serial port. If it says "failed to connect", reconnect the pico (without setting it in boot mode)
 7. Run the MicroROS agent:
 ```
