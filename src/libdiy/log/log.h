@@ -1,6 +1,7 @@
 #ifndef __LOG_H__
 #define __LOG_H__
 
+#include <hardware/structs/watchdog.h>
 #define KRED "\x1B[31m"
 #define KGRN "\x1B[32m"
 #define KYEL "\x1B[33m"
@@ -17,17 +18,26 @@
 // SOFTCHECK: Logs the critical error, turns off the LED, but lets the program
 // continue
 #define SOFTCHECK(format, ...)                                                 \
-  printf("%s[CRITICAL ERROR] " format "%s\n", KRED, ##__VA_ARGS__, KNRM);      \
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+  do {                                                                         \
+    printf("%s[CRITICAL ERROR] " format "%s\n", KRED, ##__VA_ARGS__, KNRM);    \
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                             \
+  } while (0)
 
-// HARDCHECK: Logs the critical error, turns off the LED, waits 2 seconds, and
+// HARDCHECK: Logs the critical error, flushes serial, cleanly stops Wi-Fi, and
 // reboots via watchdog
 #define HARDCHECK(format, ...)                                                 \
-  printf("%s[CRITICAL ERROR] " format                                          \
-         ". Resetting system in 2 seconds...%s\n",                             \
-         KRED, ##__VA_ARGS__, KNRM);                                           \
-  cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                               \
-  sleep_ms(2000);                                                              \
-  watchdog_reboot(0, 0, 0);
+  do {                                                                         \
+    printf("%s[CRITICAL ERROR] " format                                        \
+           ". Resetting system in 2 seconds...%s\n",                           \
+           KRED, ##__VA_ARGS__, KNRM);                                         \
+    fflush(stdout);                                                            \
+    watchdog_enable(2000, 1);                                                  \
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);                             \
+    cyw43_arch_deinit();                                                       \
+    printf("[SYSTEM] Watchdog armed. Entering reset countdown...\n");          \
+    fflush(stdout);                                                            \
+    while (1)                                                                  \
+      ;                                                                        \
+  } while (0)
 
 #endif
