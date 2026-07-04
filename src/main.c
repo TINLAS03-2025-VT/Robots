@@ -29,6 +29,9 @@
 #include <uxr/client/util/time.h>
 
 // Project drivers and settings
+//SB: review - geometry_msgs/msg/pose.h is already included above under "ROS2 Message defs".
+//SB: review   Same for std_msgs bool/int32/string below - all three are duplicated from the block above.
+//SB: review   these are harmless but it can get confusing for someone who will work on this and doesn't realise
 #include "geometry_msgs/msg/pose.h"
 #include "movement.h"
 #include "picow_udp_transports.h"
@@ -100,6 +103,9 @@ int wifi_connected(void);
 int wifi_reconnect(void);
 void ping_agent(void);
 void ros_init(void);
+//SB: review - this is declared as get_tag_pos but the actual function below is named
+//get_tag_pose. But it's never called under this name, so this declaration is
+//dead code.
 int get_tag_pos(geometry_msgs__msg__Pose *robot_pose_buffer,
                 const geometry_msgs__msg__PoseArray *positions, int tag);
 void posearray_callback(const void *msgin);
@@ -148,6 +154,9 @@ void posearray_callback(const void *msgin) {
   last_pos_callback = uxr_millis();
   posearray_rx_count++;
 
+  //SB: review - dead/commented debug line, either restore it behind a proper
+  //verbosity flag or remove it, but don't leave it commented out in the tree.
+
   //   PRINT_DEBUG("Received positions message #%lu",
   //               (unsigned long)posearray_rx_count);
 
@@ -181,10 +190,15 @@ void command_callback(const void *msgin) {
         runner_tag = runner_num;
         PRINT_DEBUG("Runner target updated to TAG [%d]", runner_tag);
 
+        //SB review: - using sleep in code that gets called in the main loop can be
+        //dangeroes because it can cause sertant ros msgs to never be recieved.
+        //we did talk about this during the project and in our use case it should not be
+        //a problem. But still this can cause issues if the project is ever expanded upon.
+
         if (runner_tag != TAG_NUM)
           sleep_ms(2000);
 
-		last_pos_callback = uxr_millis();
+	  last_pos_callback = uxr_millis();
 		last_own_pos_callback = uxr_millis();
 
         game_state = STATE_RUNNING;
@@ -214,6 +228,12 @@ void command_callback(const void *msgin) {
 }
 
 void seen_callback(const void *msgin) {
+  //SB: review - this local variable is named seen_msg, same as the global
+  //`std_msgs__msg__Bool seen_msg;` declared near the top of the file. The
+  //local shadows the global here, which works but is confusing to read.
+  //anyone skimming this function might think it's touching the global.
+  //Consider renaming the parameter (e.g. `msg`) to avoid this issue.
+
   const std_msgs__msg__Bool *seen_msg = (const std_msgs__msg__Bool *)msgin;
 
   if (seen_msg->data == true && runner_tag != -1) {
@@ -230,6 +250,7 @@ void seen_callback(const void *msgin) {
           runner_tag);
     }
   } else {
+    //SB: review - small typo
     PRINT_DEBUG("Robot CAN NOT seen the runner.");
     sees_runner = false;
   }
@@ -422,6 +443,11 @@ int wifi_reconnect(void) {
 // --- Main Processing Loops ---
 void check_connections_and_spin(void) {
   if (!wifi_connected()) {
+    //SB: review - wifi_reconnect() uses a 20 second timeout, and this function is called
+    //every iteration of the main while(true) loop. Since the return value
+    //isn't checked, if reconnecting keeps failing this call will block the
+    //whole loop (movement logic, executor spin, safety halt check) for ~20s
+    //repeatedly rather than falling through to a shorter retry/backoff.
     wifi_reconnect();
   }
   // Spin executor to handle callbacks
@@ -504,6 +530,11 @@ void process_movement_logic(void) {
 
     geometry_msgs__msg__Pose__fini(&next_step);
   }
+  //SB: review - if all_robot_positions.poses.size == 0 or the own tag isn't found, this
+  //whole block is skipped silently - the robot just doesn't move that cycle
+  //with no stop() call and no log. Might be intentional (waiting for data),
+  //but worth an explicit else branch with a debug log so it's clear this
+  //path was hit versus the function just not being called
 }
 
 int main(void) {
@@ -538,6 +569,12 @@ int main(void) {
       stop();
     }
   }
+
+
+  //SB: review - unreachable: the while(true) loop above never breaks/returns, so this
+  //cleanup code never runs. Not a functional bug on an embedded target that
+  //never "exits", but worth a comment noting it's intentionally unreachable,
+  //or just remove it.
 
   cyw43_arch_deinit();
   return 0;

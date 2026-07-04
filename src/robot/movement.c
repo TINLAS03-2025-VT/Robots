@@ -21,6 +21,10 @@
 #include "libdiy/log/log.h"
 #include "settings.h"
 
+//SB: review - math.h already defines M_PI, and deg_to_rad() below uses M_PI while
+//rad_to_deg() uses this custom PI. They're numerically the same, but having
+//two names for the same constant used inconsistently in two functions two
+//lines apart is an easy source of confusion - pick one and use it everywhere.
 #define PI 3.141592654
 
 // Global Variables for Speed Tracking & Debouncing ---
@@ -138,6 +142,11 @@ float measure_motor_speed(int pwm_val, char motor, int steps) {
 
   pwm_set_gpio_level(motor_pwm_pin, pwm_val);
 
+  //SB: review - this loop has no timeout. If the encoder never reaches Target_I_count
+  //(sensor unplugged, motor stalled, wheel physically blocked), the function
+  //hangs forever and the whole robot becomes unresponsive since nothing else
+  //runs while this spins. Worth adding a max iteration/time bound that bails
+  //out and reports a calibration failure.
   while (I_count <= Target_I_count)
     sleep_ms(10);
   sleep_ms(500);
@@ -152,6 +161,9 @@ float measure_motor_speed(int pwm_val, char motor, int steps) {
   float rotations = (float)Target_I_count / 20.0f;
   return rotations / (time_ms / 1000.0f); // Returns calculated RPS
 }
+//SB: review - this comment is confusing because some of these functions in the
+//section --- Unused functions by Marco --- are used in the main. so just remove this
+//comment or remove the functions that are not used.
 // --- Unused functions by Marco ---
 
 // Map value from range 1 to range 2
@@ -200,6 +212,7 @@ void turn_ms(int deg, float RPS, uint32_t ms_sleep) {
 
   float RPS_L, RPS_R;
   if (deg < 0) {
+    //SB: review - remove useless comment if not used in the final product
     //   if (deg > 0) {
     // Positive degrees: Turn Right (Left wheel forward, Right wheel backward)
     RPS_L = RPS;
@@ -370,6 +383,14 @@ void move_to(geometry_msgs__msg__Pose *own_pos,
              "delta=%.2f DEADZONE=%.2f\n",
              distance, yaw, angle_to_target, delta_angle,
              (float)DEADZONE); // delta_angle > 0.0
+
+    //SB: review - delta_angle is a float but turn_continuous_relative()
+    //takes an int, so this silently truncates toward zero. If DEADZONE is
+    //smaller than 1 degree, a delta_angle like 0.6 passes the
+    //`fabs(delta_angle) > DEADZONE` check above but then truncates to 0 here,
+    //hits the `if (!deg) return;` guard inside turn_continuous_relative(), and
+    //the robot never actually turns to correct that error - it'll just get
+    //stuck oscillating near the deadzone boundary without converging.
 
     turn_continuous_relative(delta_angle);
     return;

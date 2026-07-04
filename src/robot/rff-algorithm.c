@@ -10,6 +10,10 @@
 #include <geometry_msgs/msg/pose.h>
 #include <geometry_msgs/msg/pose_array.h>
 
+//SB: review - geometry_msgs/msg/point.h and geometry_msgs/msg/pose_array.h are both
+//already included above (angle-bracket form). these includes just
+//pull in the same headers a second time. Harmless with include guards but
+//worth trimming, same note as in main.c and movement.c.
 #include "geometry_msgs/msg/point.h"
 #include "geometry_msgs/msg/pose_array.h"
 #include "settings.h"
@@ -26,6 +30,7 @@ static float get_vector_length(const Vector3 *vector) {
   return sqrtf((vector->x * vector->x) + (vector->y * vector->y));
 }
 
+//SB: review - It might be usefull to add a comment explaining why the Z value isnt used. readability
 static Vector3 get_direction_vector(const Vector3 *from, const Vector3 *to) {
   Vector3 direction_vector;
   direction_vector.x = to->x - from->x;
@@ -62,6 +67,14 @@ static void apply_hunter_force(Vector3 *total_force, const Vector3 *start_pos,
   for (size_t i = 0; i < obstacle_poses->poses.size; i++) {
     Vector3 hunter_pos = obstacle_poses->poses.data[i].position;
 
+    //SB: review - this exclusion check (skip self tag and target's tag) duplicates what
+    //SB: review   hunter_array_filter() already does at the caller in
+    //SB: review   rff_algorithm_apply_forces() before this function is ever invoked with
+    //SB: review   filtered_hunters. Right now it's just redundant work on an
+    //SB: review   already-filtered list; if hunter_array_filter's filtering gets fixed/
+    //SB: review   changed later, having the exclusion logic duplicated in two places
+    //SB: review   means both need to stay in sync, which is an easy thing to miss.
+    //SB: review   Worth picking one place to do this filtering.
     // Skip self profile and specified target exclusion pins
     if (lround(hunter_pos.z) == TAG_NUM ||
         lround(hunter_pos.z) == lround(target_pos->z))
@@ -174,6 +187,16 @@ static void rff_algorithm_apply_forces(Vector3 *next_step,
   apply_hunter_force(&force_buffer, own_pos, &filtered_hunters, target_pos);
   geometry_msgs__msg__PoseArray__fini(&filtered_hunters);
 
+  //SB: review - this always passes lround(target_pos->z) as the
+  //SB: review   tag to exclude from hunter forces. That's meaningful when target_pos is
+  //SB: review   really another robot's pose (z holds its tag, as in
+  //SB: review   calculate_hunter_move_2). But calculate_runner_move_2 also calls this with
+  //SB: review   target_pos pointing at a static corner (z=0.0f) or a projected flee point
+  //SB: review   (z=start_pos->z, i.e. own tag). In the corner case, if any real robot ever
+  //SB: review   had tag 0 it would be silently excluded from hunter-avoidance forces here.
+  //SB: review   Probably fine given your tag numbering, but worth a comment noting the
+  //SB: review   assumption ("target_pos->z is only meaningful as a tag when target_pos is
+  //SB: review   an actual robot") so it doesn't bite later if tag numbering changes.
   // Apply wall forces and random jitter
   apply_wall_force(&force_buffer, own_pos);
   apply_jitter_force(&force_buffer);
@@ -343,6 +366,7 @@ void calculate_roam_move(
   // Pass the target to the force application pipeline (acts like driveTo(nextPoint(...)))
   rff_algorithm_apply_forces(optimal_move, start_pos, all_robot_positions, &roam_target);
 }
+//SB: review - commented code should be removed.
 
 // void calculate_hunter_move(Vector3 *optimal_move, const Vector3 *start_pos,
 //                            const Vector3Array *obstacle_poses,
